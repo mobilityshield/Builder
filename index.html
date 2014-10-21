@@ -29,8 +29,9 @@ Todo:
 - saving source code edited in ACE locally, perhaps 'SaveAs' (.JSCAD, .STL, .AMF)
 - DONE: include(); support of multiple files, see http://jsfiddle.net/yybRu/
 -->
-<title>OpenJSCAD.org</title>
-<link rel="shortcut icon" href="imgs/favicon.png" type="image/x-png">
+<title>Mobility Shield Builder</title>
+<link rel="shortcut icon" href="favicon.ico"/>
+<!--<link rel="shortcut icon" href="imgs/favicon.png" type="image/x-png">-->
 <link rel="stylesheet" href="jquery/themes/base/jquery-ui.css" />
 <script src="jquery/jquery-1.9.1.js"></script>
 <script src="jquery/jquery-ui.js"></script>
@@ -120,10 +121,7 @@ $(document).ready(function() {
    });
 });   
 </script>
-<div id="header">
-<img src="imgs/title.png">
-<div id="errordiv"></div>
-</div>
+<img id="header" src="imgs/title.png">
 
 <div id=menu>
 <img id=menuHandle src="imgs/menuHandleVL.png">
@@ -131,134 +129,55 @@ $(document).ready(function() {
 <div id=menuVersion>Version <script>document.write(version);</script></div>
 <p/>
 <table class=info>
-<tr><td align=right class=infoOperation>Render Code</td><td class=infoKey>SHIFT + RETURN</td></tr>
-<tr><td align=right class=infoOperation>Rotate XZ</td><td class=infoKey>Left Mouse</td></tr>
+  <tr><td align=right class=infoOperation>Rotate XZ</td><td class=infoKey>Left Mouse</td></tr>
 <tr><td align=right class=infoOperation>Pan</td><td class=infoKey>Middle Mouse or SHIFT + Left Mouse</td></tr>
 <tr><td align=right class=infoOperation>Rotate XY</td><td class=infoKey>Right Mouse or ALT + Left Mouse</td></tr>
 <tr><td align=right class=infoOperation>Zoom In/Out</td><td class=infoKey>Wheel Mouse or CTRL + Left Mouse</td></tr>
 </table>
-<p><a class=navlink href="https://github.com/Spiritdude/OpenJSCAD.org/wiki/User-Guide" target=_blank>User Guide / Documentation <img src="imgs/externalLink.png" style=externalLink></a>
-<br/><span class=menuSubInfo>How to program with OpenJSCAD: online, offline & CLI</span></p>
-<p><a class=navlink href="https://plus.google.com/115007999023701819645" rel="publisher" target=_blank>Recent Updates <img src="imgs/externalLink.png" style=externalLink></a>
-<br/><span class=menuSubInfo>Announcements of recent developments</span></p>
-<p><a class=navlink href="https://plus.google.com/communities/114958480887231067224" target=_blank>Google+ Community <img src="imgs/externalLink.png" style=externalLink></a>
-<br/><span class=menuSubInfo>Discuss with other users &amp; developers</span></p>
-<div id=examplesTitle class=navlink><a href='#' onclick='return false'>Examples</a></div>
+<p><a class=navlink href="http://mobilityshield.com" rel="publisher" target=_blank><img src="imgs/home.png" style="externalLink"> Home Page</a>
+<br/><span class="menuSubInfo">All starts here</span></p>
+<div id=examplesTitle class=navlink><a href='#' onclick='return false'><img src="imgs/list.png" style="externalLink"> Parts List</a></div>
 <div id=examples></div>
-<span class=menuSubInfo>Dozens of examples to learn from</span></p>
-<p/>
+<span class=menuSubInfo>Dozens of parts to customize</span></p>
+<p><a class=navlink href="http://mobilityshield.com/en/blog/" rel="publisher" target=_blank><img src="imgs/news.png" style="externalLink"> Recent Updates</a>
+<br/><span class="menuSubInfo">Announcements of recent developments</span></p>
+<p><a class=navlink href="https://twitter.com/mobilityshield" target="_blank"><img src="imgs/twitter_2.png" style="externalLink"> Twitter of MobilityShield</a>
+<br/><span class="menuSubInfo">Follow us on twitter =)</span></p>
 <!--<div id=optionsTitle class=navlink><a href='#' onclick='return false'>Options</a></div>
 <div id=options>...</div>
 <span class=menuSubInfo>Your personal settings</span></p>
 <p/>-->
-<b>Supported Formats</b>
-<table class=info>
-<tr><td align=right><b>jscad</b></td><td><a target=_blank href="https://github.com/Spiritdude/OpenJSCAD.org/wiki/User-Guide">OpenJSCAD</a> (native, import/export)</td></tr>
-<tr><td align=right><b>scad</b></td><td><a target=_blank href="http://openscad.org">OpenSCAD</a> (<a target=_blank href="https://github.com/Spiritdude/OpenJSCAD.org/wiki/User-Guide#direct-openscad-scad-import">experimental</a>, import)</td></tr>
-<tr><td align=right><b>stl</b></td><td><a target=_blank href="http://en.wikipedia.org/wiki/STL_(file_format)">STL format</a> (experimental, import/export)</td></tr>
-<tr><td align=right><b>amf</b></td><td><a target=_blank href="http://en.wikipedia.org/wiki/Additive_Manufacturing_File_Format">AMF format</a> (experimental, import/export)</td></tr>
-</table>
-<p><a class=navlink href="#" onclick="$('#about').show(); return false;">About</a></p>
+<p><a class=navlink href="#" onclick="$('#about').show(); return false;"><img src="imgs/info.png" style="externalLink"> About</a></p>
 </nav>
 </div> <!-- /menu -->
 
 <div id=about>
 <img src="imgs/title.png"><br>
 Version <script>document.write(version);</script>
+<p><a href="http://www.mobilityshield.com/" target="_blank">Mobility Shield</a> <b>Builder</b> by <a xmlns:cc="http://creativecommons.org/ns#" href="http://www.jrodrigo.net" property="cc:attributionName" rel="cc:attributionURL" target="_blank">J.Rodrigo</a> is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/" target="_blank">Creative Commons Attribution and ShareAlike 4.0</a>.
 <p>
-by Ren&eacute; K. M&uuml;ller (UI & CLI),
-Joost Nieuwenhuijse (core), 
-Eduard Bespalov (core),
-Gary Hogdson (OpenSCAD translator)
-<p>csg.js core &amp; improvements by 
+<a href="https://github.com/Spiritdude/OpenJSCAD.org" target="_blank">OpenJSCAD</a> by Ren&eacute; K. M&uuml;ller,
+Joost Nieuwenhuijse, 
+Eduard Bespalov,
+Gary Hogdson and <a href="https://github.com/evanw/csg.js/" target="_blank">csg.js</a> by 
 Evan Wallace, 
 Eduard Bespalov, 
 Joost Nieuwenhuijse, 
-Alexandre Girard
-<p>
-Licenses: MIT License &amp; GPLv2<br>
-Get your copy/clone/fork from <a href="https://github.com/Spiritdude/OpenJSCAD.org" target=_blank>GitHub: OpenJSCAD</a>
+Alexandre Girard is licenced under a MIT License &amp; GPLv2.
 <p><br>
 <a class=okButton href='#' onclick="$('#about').hide(); return false;"> OK </a>
 </div>
 
-<div id="editor">// -- OpenJSCAD.org logo
-
-function main() {
-   return union(
-      difference(
-         cube({size: 3, center: true}),
-         sphere({r:2, center: true})
-      ),
-      intersection(
-          sphere({r: 1.3, center: true}),
-          cube({size: 2.1, center: true})
-      )
-   ).translate([0,0,1.5]).scale(10);
-}
+<div id="editor">
 </div>
 
 <script>
 var ex = [ 
-{ file:'logo.jscad', title: 'OpenJSCAD.org Logo' },
-{ file:'logo.amf', title: 'OpenJSCAD.org Logo', type: 'AMF', new: true },
-
-{ file:'example001.jscad', title: 'Sphere with cutouts', spacing: true },
-{ file:'example001.scad', title: 'Sphere with cutouts', type: 'OpenSCAD' },
-{ file:'example002.jscad', title: 'Cone with cutouts' },
-{ file:'example002.scad', title: 'Cone with cutouts', type: 'OpenSCAD' },
-{ file:'example003.jscad', title: 'Cube with cutouts' },
-{ file:'example003.scad', title: 'Cube with cutouts', type: 'OpenSCAD' },
-// { file:'example004.jscad', title: 'Cube minus sphere' },
-{ file:'example005.jscad', title: 'Pavillon' },
-// { file:'center.jscad', title: 'Centers of Primitives' },
-
-// { file:'bunch-cubes.jscad', title: 'Bunch of Cubes', new: true }, 
-{ file:'lookup.jscad', title: 'Lookup()', spacing: true },
-{ file:'expand.jscad', title: 'Expand()' },
-{ file:'rectangular_extrude.jscad', title: 'Rectangular_extrude()' },
-{ file:'linear_extrude.jscad', title: 'Linear_extrude()' },
-{ file:'rotate_extrude.jscad', title: 'Rotate_extrude()' },
-{ file:'polyhedron.jscad', title: 'Polyhedron()' },
-{ file:'hull.jscad', title: 'Hull()', new: true },
-{ file:'chain_hull.jscad', title: 'Chain_hull()', new: true },
-{ file:'torus.jscad', title: 'Torus()' },
-
-{ file:'text.jscad', title: 'Vector_text()', new: true, spacing: true },
-
-{ file:'transparency.jscad', title: 'Transparency', new: true, spacing: true },
-{ file:'transparency.amf', title: 'Transparency', type: 'AMF', new: true },
-{ file:'transparency2.jscad', title: 'Transparency 2', new: true },
-
-{ file:'slices/double-screw.jscad', title: 'SolidFromSlices(): Double Screw', new: true, spacing: true },
-{ file:'slices/four2three.jscad', title: 'SolidFromSlices(): 4 to 3', new: true },
-{ file:'slices/four2three-round.jscad', title: 'SolidFromSlices(): 4 to 3 round', new: true },
-{ file:'slices/spring.jscad', title: 'SolidFromSlices(): Spring', new: true },
-{ file:'slices/tor.jscad', title: 'SolidFromSlices(): Tor (multi-color)', new: true },
-{ file:'slices/rose.jscad', title: 'SolidFromSlices(): Rose Curve', new: true },
-
-{ file:'servo.jscad', title: 'Interactive Params: Servo Motor', wrap: true },
-{ file:'gear.jscad', title: 'Interactive Params: Gear' },
-{ file:'s-hook.jscad', title: 'Interactive Params: S Hook' },
-{ file:'grille.jscad', title: 'Interactive Params: Grille' },
-{ file:'axis-coupler.jscad', title: 'Interactive Params: Axis Coupler' },
-{ file:'lamp-shade.jscad', title: 'Interactive Params: Lamp Shade' },
-{ file:'celtic-knot-ring.jscad', title: 'Interactive Params: Celtic Knot Ring' },
-{ file:'stepper-motor.jscad', title: 'Interactive Params: Stepper Motor' },
-{ file:'iphone4-case.jscad', title: 'Interactive Params: iPhone4 Case' },
-{ file:'name_plate.jscad', title: 'Interactive Params: Name Plate', new: true },
-{ file:'globe.jscad', title: 'Globe', new: true },
-
-{ file:'platonics/', title: 'Recursive Include(): Platonics', new: true, spacing: true },
-
-{ file:'3d_sculpture-VernonBussler.stl', title: '3D Model: 3D Sculpture (Vernon Bussler)', type: 'STL', spacing: true },
-{ file:'frog-OwenCollins.stl', title: '3D Model: Frog (Owen Collins)', type: 'STL' },  
-{ file:'thing_7-Zomboe.stl', title: '3D Model: Thing 7 / Flower (Zomboe)', type: 'STL' },  
-// { file:'organic_flower-Bogoboy23.stl', title: '3D Model: Organic Flower (Bogoboy23)', type: 'STL' }, // all wrong normals!!
-{ file:'yoda-RichRap.stl', title: '3D Model: Yoda (RichRap)', type: 'STL' },
-// { url:'http://pastebin.com/raw.php?i=wJLctyAQ', title: 'OpenJSCAD.org Logo', type:'Remote JSCAD' }
-// { file:'treefrog-Jerrill.stl', title: '3D Model: Treefrog (Jerrill)', type: 'STL' },    // nice frog, yet slow 
-// { file:'klein_bottle-DizingOf.stl', title: '3D Model: Klein Bottle (DizingOf)', type: 'STL' } // too slow, over 400k triangles, huge memory consumption
+{ file:'plates-strips.jscad', title: 'Plates and strips' , new: true },
+{ file:'L-plate.jscad', title: 'L Plates', new: true },
+{ file:'triangular-plate.jscad', title: 'Triangular plates', beta: true , new: true},
+{ file:'miniprofile.jscad', title: 'MiniProfile [15x15]', beta: true , new: true},
+{ file:'gear.jscad', title: 'Gears' , new: true },
 ];
 if(me=='web-online') {
    var wrap = 26;
@@ -274,6 +193,7 @@ if(me=='web-online') {
       src += "<li><a href=# onclick='fetchExample(\"examples/"+ex[i].file+"\"); return false;'>"+ex[i].title+"</a>\n";
       if(ex[i].type) src += " <span class=type>("+ex[i].type+")</span></a>";
       if(ex[i].new) src += " <span class=newExample>new</span></a>";
+	  if(ex[i].beta) src += " <span class=betaExample>Beta</span></a>";
       //src += "<li><a href='examples/"+ex[i].file+"\'>"+ex[i].title+"</a>\n";
    }
    src += "</td></tr></table>";
@@ -379,31 +299,11 @@ if(me=='web-online') {
 
 <div oncontextmenu="return false;" id="viewer"></div> <!-- avoiding popup when right mouse is clicked -->
 
-<div id="parametersdiv"></div>
+<div id="parametersdiv"><div id="errordiv"></div></div>
 <div id="tail">
 <div id="statusdiv"></div>
-<div id="filedropzone">
-  <div id="filedropzone_empty">
-  <script>document.write("Drop your jscad, scad, amf, stl file or multiple jscad files "+
-     (browser=='chrome'&&me=='web-online'?"or folder with jscad files ":"")+
-     " here (see <a style='font-weight: normal' href='https://github.com/Spiritdude/OpenJSCAD.org/wiki/User-Guide#support-of-include' target=_blank>details</a>) "+
-     "<br>or edit OpenJSCAD or OpenSCAD source-code in built-in editor direct.");
-  </script></div>
-  <div id="filedropzone_filled">
-    <span id="currentfile">...</span>
-    <div id="filebuttons">
-      <button id="getstlbutton" style="display:none" onclick="getStl();">Get STL</button>
-      <button onclick="superviseAllFiles({forceReload:true});">Reload</button>
-      <!--button onclick="parseFile(gCurrentFile,true,false);">Debug (see below)</button-->
-	   <label for="autoreload">Auto Reload</label><input type="checkbox" name="autoreload" value="" id="autoreload" onclick="toggleAutoReload();">
-    </div>
-  </div>
 </div>
-</div>
-<div id=footer>
-OpenJSCAD.org 
-<script>document.write(version);</script>, MIT License &amp; GPLv2, get your own copy/clone/fork from <a target=_blank href="https://github.com/Spiritdude/OpenJSCAD.org">GitHub: OpenJSCAD</a>
-</div>
+<div id=footer></div>
 
 <!--script src="http://d1n0x3qji82z53.cloudfront.net/src-min-noconflict/ace.js" type="text/javascript" charset="utf-8"></script-->
 <script src="ace/ace.js" type="text/javascript" charset="utf-8"></script>
@@ -491,7 +391,7 @@ function onload() {
    }
    
    gProcessor = new OpenJsCad.Processor(document.getElementById("viewer"));
-   setupDragDrop();
+
    //gProcessor.setDebugging(debugging); 
    if(me=='web-online') {    // we are online, fetch first example
       //    gProcessor.setJsCad(editor.getValue());
@@ -857,7 +757,7 @@ function superviseAllFiles(p) {           // check if there were changes: (re-)l
    if(p&&p.forceReload) 
       gMemFsChanged++;
    
-   if(!gRootFs||gRootFs.length==0||me=='web-offline') {              // walkFileTree won't work with file:// (regardless of chrome|firefox)
+   if(!gRootFs||me=='web-offline') {              // walkFileTree won't work with file:// (regardless of chrome|firefox)
      for(var i=0; i<gCurrentFiles.length; i++) {
         console.log("[offline] checking "+gCurrentFiles[i].name);
         gMemFsTotal++;

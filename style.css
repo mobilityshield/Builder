@@ -14,12 +14,12 @@ body {
 
 a {
    text-decoration: none;
-   color: #6020a0;
+   color: #0090D3;
    font-weight: bold;
 }
 
 a:visited {
-   color: #6020a0;
+   color: #0090D3;
 }
 
 #header {
@@ -37,6 +37,7 @@ a:visited {
    right: 0px;
    z-index: 6;
    background: rgba(255,255,255,0.15);
+   visibility:hidden !important;
 }
 
 #viewer {
@@ -97,7 +98,7 @@ canvas {
 #tail { 
    z-index: 4;
    position: absolute;
-   bottom: 1em; 
+   bottom: 0em; 
    margin: 1em;
 }
 
@@ -173,6 +174,14 @@ canvas {
    padding-right: 4px;
 }
 
+#menu #examples .betaExample {
+   color: white;
+   border-radius: 5px;
+   background: black;
+   padding-left: 4px;
+   padding-right: 4px;
+}
+
 #menu #examples, #menu #examples a {
    margin-top: 0px;
 }
@@ -194,7 +203,7 @@ canvas {
 
 .info .infoOperation {
    font-weight: bold;
-   color: #602080;
+   color: #0090D3;
 }
 
 .info .infoKey {
@@ -223,11 +232,11 @@ canvas {
    z-index: 12;
    position: absolute;
    display: none;
-   background: #f8e8ff;
-   border: solid 1px #888;
+   background: #D7F2FF;
+   border: solid 1px #0091D4;
    padding: 1em;
    border-radius: 5px;
-   box-shadow: 0px 0px 10px #849;
+   box-shadow: 0px 0px 10px #0090D3;
 }
 
 #examples td {
