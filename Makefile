@@ -1,21 +1,31 @@
-VERSION = 0.018
-LIB = /usr/local/lib/openjscad/
-NODE_MODULES = /usr/local/lib/node_modules/
+VERSION = 0.6.0
+PREFIX = /usr/local
+BIN = $(PREFIX)/bin/
+LIB = $(PREFIX)/lib/openjscad/
+NODE_MODULES = $(PREFIX)/lib/node_modules/
 
 all::
-	@echo "make install deinstall tests clean" 
+	@echo "make install deinstall tests clean"
 
 install::
-	test -d ${NODE_MODULES}/openscad-openjscad-translator || sudo npm -g install openscad-openjscad-translator
-	#test -d ${NODE_MODULES}/jquery || sudo npm -g install jquery
-	sudo scp openjscad /usr/local/bin/
-	sudo mkdir -p ${LIB}
-	sudo scp *.js ${LIB}
+	test -d ${NODE_MODULES}/openscad-openjscad-translator || npm -g install openscad-openjscad-translator
+	#test -d ${NODE_MODULES}/jquery || npm -g install jquery
+	scp openjscad $(BIN)
+	mkdir -p ${LIB}
+	scp openjscad.js ${LIB}
+	scp openscad.js ${LIB}
+	scp Blob.js ${LIB}
+	scp formats.js ${LIB}
+	scp lightgl.js ${LIB}
+	scp csg.js ${LIB}
+	scp openscad-openjscad-translator.js ${LIB}
+	scp underscore.js ${LIB}
 	mkdir -p cache; chmod a+rw cache
-                                
+
 deinstall::
-	sudo rm -rf ${NODE_MODULES}/openscad-openjscad-translator
-	sudo rm -f ${LIB}/*.js 
+	rm -rf ${NODE_MODULES}openscad-openjscad-translator
+	rm $(BIN)/openjscad
+	rm -rf ${LIB}
 
 tests::
 	openjscad examples/logo.jscad
@@ -30,6 +40,7 @@ tests::
 	openjscad examples/example001.scad -o examples/example001-fromSCAD.jscad
 	openjscad examples/transparency.jscad -o examples/transparency.amf
 	cd examples/platonics && make
+	cd examples; openjscad globe.jscad
 	cd examples/include-test && make
 	# -- enable if you have openscad installed ('unsetenv DISPLAY' perhaps too)
 	# openscad examples/example001.scad -o examples/example001-fromSCADviaOpenSCAD.stl
@@ -41,7 +52,7 @@ clean::
 	cd examples/platonics && make clean
 	cd examples/include-test && make clean
 
-# TODO:                                        
+# TODO:
 # - locally submodule of openscad-openjscad-translator, see http://git-scm.com/book/en/Git-Tools-Submodules
 
 # --- developers only below
@@ -50,19 +61,35 @@ push::
 	git remote set-url origin git@github.com:Spiritdude/OpenJSCAD.org.git
 	git push -u origin master
 
+push-dev::
+	git remote set-url origin git@github.com:Spiritdude/OpenJSCAD.org.git
+	git push -u origin dev
+
 pull::
 	git remote set-url origin git@github.com:Spiritdude/OpenJSCAD.org.git
 	git pull -u origin master
 
-dist::	
+dev-to-master::
+	git checkout dev
+	git merge -s ours master
+	git checkout master
+	git merge dev
+
+master-to-dev::
+	git checkout master
+	git merge -s ours dev
+	git checkout dev
+	git merge master
+
+dist::
 	cd ..; tar cfz Backup/openjscad.org-${VERSION}.tar.gz "--exclude=*.git/*" OpenJSCAD.org/
 
-backup::	
+backup::
 	scp ../Backup/openjscad.org-${VERSION}.tar.gz the-labs.com:Backup/
 
 edit::
-	dee4 index.html Makefile README.md *.css *.js openjscad
+	dee4 index.html Makefile LICENSE README.md *.css *.js openjscad
 
 live::
-	# -- do not enable --delete is it will destroy stats folder
-	rsync -av --exclude=.git --exclude=cache/ ./ the-labs.com:Sites/openjscad.org/ 
+	# -- do not enable --delete as it will destroy stats folder
+	rsync -av --exclude=.git --exclude=cache/ ./ delta:Sites/openjscad.org/
