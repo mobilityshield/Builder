@@ -47505,14 +47505,30 @@ function init() {
     gProcessor.setStatus('Loading ' + design + " <img id=busy src='imgs/busy.gif'>");
 
     xhr.onload = function () {
+      if (this.status < 200 || this.status >= 300) {
+        gProcessor.setStatus('Error loading ' + design + ' (' + this.status + ')');
+        return;
+      }
+
       var source = this.responseText;
-      // console.log(source);
 
       if (design.match(/\.jscad$/i) || design.match(/\.js$/i)) {
         gProcessor.setStatus('Processing ' + design + " <img id=busy src='imgs/busy.gif'>");
         gProcessor.setJsCad(source, design);
+        return;
       }
+
+      gProcessor.setStatus('Unsupported preview format: ' + design);
     };
+
+    xhr.onerror = function () {
+      gProcessor.setStatus('Error loading ' + design);
+    };
+
+    xhr.onabort = function () {
+      gProcessor.setStatus('Loading aborted ' + design);
+    };
+
     xhr.send();
   }
 }
@@ -47933,6 +47949,8 @@ LightGLEngine.prototype = {
     gl.rotate(this.angleY, 0, 1, 0);
     gl.rotate(this.angleZ, 0, 0, 1);
 
+    gl.pushMatrix();
+
     var rotate = this.options.rotate || {};
     var rotateOrigin = rotate.origin || { x: 0, y: 0, z: 0 };
     var rotateAngle = Number(this.rotateAngle) || 0;
@@ -47973,6 +47991,9 @@ LightGLEngine.prototype = {
         if (this.options.solid.overlay) gl.enable(gl.DEPTH_TEST);
       }
     }
+
+    gl.popMatrix();
+
     // draw the plate and the axis
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

@@ -15,8 +15,11 @@
     document.baseURI
   ).href;
 
-  var HOVER_DELAY = Number(config.hoverDelay) || 120;
-  var WARM_COUNT = Number(config.warmCount) || 6;
+  var hoverDelayValue = Number(config.hoverDelay);
+  var warmCountValue = Number(config.warmCount);
+
+  var HOVER_DELAY = Number.isFinite(hoverDelayValue) ? hoverDelayValue : 120;
+  var WARM_COUNT = Number.isFinite(warmCountValue) ? warmCountValue : 6;
 
   var PREVIEW_LABEL = "3D Preview";
   var CLOSE_LABEL = "Close 3D Preview";
@@ -144,8 +147,14 @@
     return (card.getAttribute("model-href-window") || "new").toLowerCase();
   }
 
-  function navigateCard(card) {
+  function getModelHrefUrl(card) {
     var href = card.getAttribute("model-href");
+    if (!href) return "";
+    return new URL(href, APP_BASE).href;
+  }
+
+  function navigateCard(card) {
+    var href = getModelHrefUrl(card);
     if (!href) return;
 
     var openMode = getOpenMode(card);
@@ -218,6 +227,11 @@
     watchUntilReady(card);
   }
 
+  function resetSharedFrame() {
+    sharedFrame.dataset.previewKey = "";
+    sharedFrame.srcdoc = buildBlankDocument();
+  }
+
   function detachPreview(card) {
     stopReadyWatcher();
 
@@ -229,6 +243,8 @@
     if (sharedFrame.parentElement) {
       sharedFrame.parentElement.removeChild(sharedFrame);
     }
+
+    resetSharedFrame();
 
     if (activeCard === card) {
       activeCard = null;
@@ -248,6 +264,8 @@
     if (sharedFrame.parentElement) {
       sharedFrame.parentElement.removeChild(sharedFrame);
     }
+
+    resetSharedFrame();
   }
 
   function updateButtonState(card, isActive) {
