@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="en" data-app-base="./">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mobility Shield - PNG Preview Generator</title>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --panel: #ffffff;
+      --line: #d9e1ea;
+      --text: #1b2430;
+      --muted: #6d7a8c;
+      --shadow: 0 8px 20px rgba(17, 30, 48, 0.08);
+      --radius: 12px;
+      --accent: #2b6de5;
+      --accent-2: #1d4fb3;
+      --ok: #20834f;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      min-width: 320px;
+      padding: 24px;
+    }
+
+    .page {
+      width: min(1240px, calc(100% - 8px));
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .toolbar {
+      display: grid;
+      gap: 10px;
+    }
+
+    .toolbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .toolbar button,
+    .toolbar a,
+    .toolbar select,
+    .toolbar input[type="number"] {
+      appearance: none;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--text);
+      text-decoration: none;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1;
+      min-height: 40px;
+    }
+
+    .toolbar select {
+      min-width: min(520px, 100%);
+      max-width: 100%;
+      cursor: pointer;
+    }
+
+    .toolbar input[type="number"] {
+      width: 150px;
+      min-width: 150px;
+      border-radius: 999px;
+    }
+
+    .toolbar button,
+    .toolbar a {
+      cursor: pointer;
+    }
+
+    .toolbar button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .toolbar button.secondary {
+      background: #fff;
+      border-color: var(--accent);
+      color: var(--accent-2);
+    }
+
+    .toolbar button:disabled,
+    .toolbar a.disabled {
+      opacity: 0.55;
+      cursor: wait;
+      pointer-events: none;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 28px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #eef4ff;
+      color: var(--accent-2);
+      border: 1px solid #d4e3ff;
+    }
+
+    .badge.ok {
+      background: #eaf7ef;
+      color: var(--ok);
+      border-color: #cfe8d8;
+    }
+
+    .field-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px 6px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      min-height: 40px;
+    }
+
+    .field-chip label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .field-chip span {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .meta {
+      display: grid;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    .meta-row {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .mono {
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      word-break: break-word;
+    }
+
+    .status {
+      margin: 0;
+      white-space: pre-wrap;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .preview-box {
+      width: min(100%, 900px);
+      aspect-ratio: 1 / 1;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: linear-gradient(145deg, #eef3f8 0%, #dde6ef 100%);
+    }
+
+    .preview-box img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #eef3f8;
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .result-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .result-thumb {
+      aspect-ratio: 1 / 1;
+      background: linear-gradient(145deg, #eef3f8 0%, #dde6ef 100%);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .result-thumb img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+      background: #eef3f8;
+    }
+
+    .result-body {
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .result-title {
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .result-meta {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .result-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .result-actions a {
+      appearance: none;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--text);
+      text-decoration: none;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+      margin: 0;
+    }
+
+    #captureHost {
+      position: fixed;
+      left: -100000px;
+      top: -100000px;
+      width: 1200px;
+      height: 1200px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #captureFrame {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #eef3f8;
+    }
+
+    @media (max-width: 720px) {
+      body { padding: 14px; }
+      .meta-row { grid-template-columns: 1fr; gap: 6px; }
+      .toolbar select { min-width: 100%; }
+      .field-chip { width: 100%; justify-content: space-between; border-radius: 14px; }
+      .toolbar input[type="number"] { width: 120px; min-width: 120px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="panel">
+      <div class="toolbar">
+        <div class="toolbar-row">
+          <select id="cardSelect" aria-label="Select viewer card"></select>
+          <span id="cardsCountBadge" class="badge">Cards: 0</span>
+          <span id="batchBadge" class="badge hidden">Ready</span>
+        </div>
+
+        <div class="toolbar-row">
+          <div class="field-chip">
+            <label for="settleDelayInput">Capture delay</label>
+            <input id="settleDelayInput" type="number" min="0" step="50" value="500" />
+            <span>ms</span>
+          </div>
+
+          <button id="reloadBtn" class="secondary" type="button">Reload Cards</button>
+          <button id="generateBtn" class="primary" type="button">Generate Selected PNG</button>
+          <a id="downloadBtn" class="hidden" href="#" download="preview.png">Download Selected PNG</a>
+          <button id="generateAllBtn" class="secondary" type="button">Generate All PNGs (ZIP)</button>
+          <a id="downloadZipBtn" class="hidden" href="#" download="viewer-previews.zip">Download ZIP</a>
+        </div>
+      </div>
+
+      <p id="status" class="status">Preparing preview…</p>
+    </section>
+
+    <section class="panel meta">
+      <div class="meta-row"><strong>Viewer source</strong><span id="metaViewer" class="mono"></span></div>
+      <div class="meta-row"><strong>Selected card</strong><span id="metaCard"></span></div>
+      <div class="meta-row"><strong>Model file</strong><span id="metaModel" class="mono"></span></div>
+      <div class="meta-row"><strong>Camera</strong><span id="metaCamera" class="mono"></span></div>
+      <div class="meta-row"><strong>Rotate</strong><span id="metaRotate" class="mono"></span></div>
+      <div class="meta-row"><strong>Capture delay</strong><span id="metaDelay" class="mono"></span></div>
+      <p class="hint">
+        This page reads all existing <span class="mono">.viewer-card[model-file]</span> entries from <span class="mono">viewer.html</span>,
+        keeps the camera already defined in each card, forces <span class="mono">rotate=false</span> only in this file,
+        and waits the configured extra milliseconds before capturing the PNG.
+      </p>
+    </section>
+
+    <section class="panel">
+      <div class="preview-box">
+        <img id="resultImage" alt="Generated PNG preview" />
+      </div>
+      <p class="hint" style="margin-top:12px;">
+        Selection priority on load: <span class="mono">card-index</span> → <span class="mono">model-file</span> → <span class="mono">model-href</span> → first card in <span class="mono">viewer.html</span>.
+      </p>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar-row" style="margin-bottom:12px;">
+        <strong>Generated PNGs</strong>
+      </div>
+      <div id="resultsGrid" class="results-grid"></div>
+    </section>
+  </main>
+
+  <div id="captureHost" aria-hidden="true">
+    <iframe id="captureFrame" sandbox="allow-scripts allow-same-origin"></iframe>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var DEFAULT_CAMERA = {
+        fov: 45,
+        position: { x: 0, y: 0, z: 75 },
+        angle: { x: -45, y: 0, z: -45 }
+      };
+
+      var DEFAULT_ROTATE = {
+        enabled: false,
+        axis: "z",
+        speed: 50,
+        origin: { x: 0, y: 0, z: 0 }
+      };
+
+      var DEFAULT_SETTLE_DELAY = 500;
+
+      var params = new URLSearchParams(window.location.search);
+
+      var cardSelect = document.getElementById("cardSelect");
+      var cardsCountBadge = document.getElementById("cardsCountBadge");
+      var batchBadge = document.getElementById("batchBadge");
+      var reloadBtn = document.getElementById("reloadBtn");
+      var generateBtn = document.getElementById("generateBtn");
+      var downloadBtn = document.getElementById("downloadBtn");
+      var generateAllBtn = document.getElementById("generateAllBtn");
+      var downloadZipBtn = document.getElementById("downloadZipBtn");
+      var settleDelayInput = document.getElementById("settleDelayInput");
+      var statusNode = document.getElementById("status");
+      var resultImage = document.getElementById("resultImage");
+      var resultsGrid = document.getElementById("resultsGrid");
+      var captureHost = document.getElementById("captureHost");
+      var captureFrame = document.getElementById("captureFrame");
+
+      var metaViewer = document.getElementById("metaViewer");
+      var metaCard = document.getElementById("metaCard");
+      var metaModel = document.getElementById("metaModel");
+      var metaCamera = document.getElementById("metaCamera");
+      var metaRotate = document.getElementById("metaRotate");
+      var metaDelay = document.getElementById("metaDelay");
+
+      var allConfigs = [];
+      var currentConfig = null;
+      var currentIndex = 0;
+      var generatedResults = [];
+      var lastZipUrl = "";
+
+      function setStatus(text) {
+        statusNode.textContent = text;
+      }
+
+      function safeJson(value) {
+        return JSON.stringify(value);
+      }
+
+      function getViewerSourceUrl() {
+        var source = params.get("viewer-src") || "viewer.html";
+        return new URL(source, window.location.href).href;
+      }
+
+      function toAbsoluteUrl(path, baseUrl) {
+        if (!path) return "";
+        try {
+          return new URL(path, baseUrl).href;
+        } catch (error) {
+          return path;
+        }
+      }
+
+      function getQueryNumber(name, fallbackValue) {
+        if (!params.has(name)) return fallbackValue;
+        var value = Number(params.get(name));
+        return Number.isFinite(value) ? value : fallbackValue;
+      }
+
+      function getQueryBoolean(name, fallbackValue) {
+        if (!params.has(name)) return fallbackValue;
+        var raw = String(params.get(name)).trim().toLowerCase();
+        if (raw === "true" || raw === "1" || raw === "yes" || raw === "on") return true;
+        if (raw === "false" || raw === "0" || raw === "no" || raw === "off") return false;
+        return fallbackValue;
+      }
+
+      function getAttrNumber(el, name, fallbackValue) {
+        if (!el) return fallbackValue;
+        var raw = el.getAttribute(name);
+        if (raw === null || raw === "") return fallbackValue;
+        var value = Number(raw);
+        return Number.isFinite(value) ? value : fallbackValue;
+      }
+
+      function getAttrBoolean(el, name, fallbackValue) {
+        if (!el) return fallbackValue;
+        var raw = el.getAttribute(name);
+        if (raw === null || raw === "") return fallbackValue;
+        raw = String(raw).trim().toLowerCase();
+        if (raw === "true" || raw === "1" || raw === "yes" || raw === "on") return true;
+        if (raw === "false" || raw === "0" || raw === "no" || raw === "off") return false;
+        return fallbackValue;
+      }
+
+      function getAttrString(el, name, fallbackValue) {
+        if (!el) return fallbackValue;
+        var raw = el.getAttribute(name);
+        if (raw === null || raw === "") return fallbackValue;
+        return String(raw).trim();
+      }
+
+      function getOverrideString(el, attrName, fallbackValue) {
+        if (params.has(attrName)) return String(params.get(attrName)).trim();
+        return getAttrString(el, attrName, fallbackValue);
+      }
+
+      function getOverrideNumber(el, attrName, fallbackValue) {
+        if (params.has(attrName)) return getQueryNumber(attrName, fallbackValue);
+        return getAttrNumber(el, attrName, fallbackValue);
+      }
+
+      function getOverrideBoolean(el, attrName, fallbackValue) {
+        if (params.has(attrName)) return getQueryBoolean(attrName, fallbackValue);
+        return getAttrBoolean(el, attrName, fallbackValue);
+      }
+
+      function buildCameraOptions(card) {
+        return {
+          fov: getOverrideNumber(card, "model-camera-fov", DEFAULT_CAMERA.fov),
+          position: {
+            x: getOverrideNumber(card, "model-camera-position-x", DEFAULT_CAMERA.position.x),
+            y: getOverrideNumber(card, "model-camera-position-y", DEFAULT_CAMERA.position.y),
+            z: getOverrideNumber(card, "model-camera-position-z", DEFAULT_CAMERA.position.z)
+          },
+          angle: {
+            x: getOverrideNumber(card, "model-camera-angle-x", DEFAULT_CAMERA.angle.x),
+            y: getOverrideNumber(card, "model-camera-angle-y", DEFAULT_CAMERA.angle.y),
+            z: getOverrideNumber(card, "model-camera-angle-z", DEFAULT_CAMERA.angle.z)
+          }
+        };
+      }
+
+      function buildRotateOptions(card) {
+        var axis = getOverrideString(card, "model-rotate-axis", DEFAULT_ROTATE.axis).toLowerCase();
+        if (axis !== "x" && axis !== "y" && axis !== "z") axis = DEFAULT_ROTATE.axis;
+
+        return {
+          enabled: false,
+          axis: axis,
+          speed: getOverrideNumber(card, "model-rotate-speed", DEFAULT_ROTATE.speed),
+          origin: {
+            x: getOverrideNumber(card, "model-rotate-origin-x", DEFAULT_ROTATE.origin.x),
+            y: getOverrideNumber(card, "model-rotate-origin-y", DEFAULT_ROTATE.origin.y),
+            z: getOverrideNumber(card, "model-rotate-origin-z", DEFAULT_ROTATE.origin.z)
+          },
+          originalEnabled: getOverrideBoolean(card, "model-rotate", DEFAULT_ROTATE.enabled)
+        };
+      }
+
+      function buildSafeFilename(value) {
+        return String(value || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+      }
+
+      function normalizePngFilename(value) {
+        var name = String(value || "").trim() || "preview";
+        return /\.png$/i.test(name) ? name : name + ".png";
+      }
+
+      function normalizeZipFilename(value) {
+        var name = String(value || "").trim() || "viewer-previews";
+        return /\.zip$/i.test(name) ? name : name + ".zip";
+      }
+
+      function getCardTitle(card) {
+        var imageNode = card.querySelector(".viewer-image");
+        return (imageNode && (imageNode.getAttribute("data-title") || imageNode.getAttribute("alt"))) ||
+          getAttrString(card, "model-file", "Preview");
+      }
+
+      function getActiveSettleDelay() {
+        var value = Number(settleDelayInput.value);
+        if (!Number.isFinite(value) || value < 0) value = DEFAULT_SETTLE_DELAY;
+        value = Math.floor(value);
+        settleDelayInput.value = String(value);
+        return value;
+      }
+
+      function syncSettleDelayInUrl() {
+        var value = getActiveSettleDelay();
+        params.set("settle-delay", String(value));
+
+        var newUrl = window.location.pathname;
+        var qs = params.toString();
+        if (qs) newUrl += "?" + qs;
+        if (window.location.hash) newUrl += window.location.hash;
+
+        try {
+          window.history.replaceState(null, "", newUrl);
+        } catch (error) {}
+        updateMetaDelay();
+      }
+
+      function updateMetaDelay() {
+        metaDelay.textContent = String(getActiveSettleDelay()) + " ms";
+      }
+
+      async function fetchViewerDocument(url) {
+        var response = await fetch(url, {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-cache"
+        });
+
+        if (!response.ok) {
+          throw new Error("Could not load " + url + " (" + response.status + ")");
+        }
+
+        var html = await response.text();
+        return new DOMParser().parseFromString(html, "text/html");
+      }
+
+      function extractConfigFromCard(card, index, viewerUrl, appBaseUrl) {
+        var modelFileRaw = getOverrideString(card, "model-file", "");
+        if (!modelFileRaw) {
+          throw new Error("The selected card does not define model-file.");
+        }
+
+        var title = getCardTitle(card);
+
+        return {
+          viewerUrl: viewerUrl,
+          appBaseUrl: appBaseUrl,
+          cardIndex: index,
+          title: title,
+          modelFile: modelFileRaw,
+          designUrl: toAbsoluteUrl(modelFileRaw, appBaseUrl),
+          modelHref: getOverrideString(card, "model-href", ""),
+          camera: buildCameraOptions(card),
+          rotate: buildRotateOptions(card),
+          width: Math.max(64, Math.floor(getQueryNumber("width", 1200))),
+          height: Math.max(64, Math.floor(getQueryNumber("height", 1200))),
+          filename: normalizePngFilename(buildSafeFilename(title) || ("preview-" + index))
+        };
+      }
+
+      function extractAllConfigs(doc, viewerUrl) {
+        var htmlNode = doc.documentElement;
+        var appBaseAttr = htmlNode && htmlNode.getAttribute("data-app-base")
+          ? htmlNode.getAttribute("data-app-base")
+          : "./";
+        var appBaseUrl = new URL(appBaseAttr, viewerUrl).href;
+        var cards = Array.prototype.slice.call(doc.querySelectorAll(".viewer-card[model-file]"));
+
+        if (!cards.length) {
+          throw new Error("No .viewer-card[model-file] entries were found in viewer.html.");
+        }
+
+        return cards.map(function (card, index) {
+          return extractConfigFromCard(card, index, viewerUrl, appBaseUrl);
+        });
+      }
+
+      function findInitialIndex(configs) {
+        if (!configs.length) return 0;
+
+        if (params.has("card-index")) {
+          var index = Number(params.get("card-index"));
+          if (Number.isInteger(index) && index >= 0 && index < configs.length) return index;
+        }
+
+        if (params.has("model-file")) {
+          var wantedModelFile = String(params.get("model-file")).trim();
+          for (var i = 0; i < configs.length; i += 1) {
+            if (configs[i].modelFile === wantedModelFile || configs[i].designUrl === wantedModelFile) return i;
+          }
+        }
+
+        if (params.has("model-href")) {
+          var wantedHref = String(params.get("model-href")).trim();
+          for (var j = 0; j < configs.length; j += 1) {
+            if (configs[j].modelHref === wantedHref) return j;
+          }
+        }
+
+        return 0;
+      }
+
+      function updateMeta(config) {
+        metaViewer.textContent = config.viewerUrl;
+        metaCard.textContent = "#" + config.cardIndex + " — " + config.title;
+        metaModel.textContent = config.modelFile + " → " + config.designUrl;
+        metaCamera.textContent = safeJson(config.camera);
+        metaRotate.textContent = safeJson({
+          enabled: config.rotate.enabled,
+          axis: config.rotate.axis,
+          speed: config.rotate.speed,
+          origin: config.rotate.origin,
+          originalEnabledInViewer: config.rotate.originalEnabled
+        });
+        updateMetaDelay();
+      }
+
+      function populateSelect(configs, selectedIndex) {
+        cardSelect.innerHTML = "";
+        configs.forEach(function (config, index) {
+          var option = document.createElement("option");
+          option.value = String(index);
+          option.textContent = "#" + index + " — " + config.title;
+          if (index === selectedIndex) option.selected = true;
+          cardSelect.appendChild(option);
+        });
+        cardsCountBadge.textContent = "Cards: " + configs.length;
+      }
+
+      function setCurrentConfigByIndex(index) {
+        if (!allConfigs.length) return;
+        if (!Number.isInteger(index) || index < 0 || index >= allConfigs.length) index = 0;
+        currentIndex = index;
+        currentConfig = allConfigs[index];
+        cardSelect.value = String(index);
+        updateMeta(currentConfig);
+      }
+
+      function clearZipDownload() {
+        if (lastZipUrl) {
+          URL.revokeObjectURL(lastZipUrl);
+          lastZipUrl = "";
+        }
+        downloadZipBtn.classList.add("hidden");
+        downloadZipBtn.removeAttribute("href");
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/"/g, "&quot;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+
+      function buildPreviewDocument(config) {
+        var safeBase = escapeHtml(config.appBaseUrl);
+        var safeDesign = escapeHtml(config.designUrl);
+        var cameraJson = JSON.stringify(config.camera);
+        var rotateJson = JSON.stringify({
+          enabled: false,
+          axis: config.rotate.axis,
+          speed: config.rotate.speed,
+          origin: config.rotate.origin
+        });
+        var width = config.width;
+        var height = config.height;
+
+        return [
+          "<!doctype html>",
+          '<html lang="en">',
+          "<head>",
+          '<meta charset="utf-8">',
+          '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+          '<base href="' + safeBase + '">',
+          '<link rel="stylesheet" href="min.css" type="text/css">',
+          "<style>",
+          "html, body {",
+          "  margin: 0;",
+          "  width: 100%;",
+          "  height: 100%;",
+          "  overflow: hidden;",
+          "  background: #eef3f8;",
+          "}",
+          "body {",
+          "  width: " + width + "px;",
+          "  height: " + height + "px;",
+          "}",
+          ".jscad-container {",
+          "  margin: 0 !important;",
+          "  padding: 0 !important;",
+          "  border: 0 !important;",
+          "  min-width: 0 !important;",
+          "  width: 100%;",
+          "  height: 100%;",
+          "}",
+          "#header, #tail {",
+          "  display: none !important;",
+          "}",
+          "#viewerContext {",
+          "  margin: 0 !important;",
+          "  border: 0 !important;",
+          "  width: 100% !important;",
+          "  height: 100% !important;",
+          "  background: #eef3f8 !important;",
+          "}",
+          "#viewerContext canvas {",
+          "  display: block;",
+          "  width: 100% !important;",
+          "  height: 100% !important;",
+          "  pointer-events: none;",
+          "}",
+          "#errordiv {",
+          "  display: none !important;",
+          "}",
+          "</style>",
+          "<script>",
+          "(function () {",
+          "  var originalGetContext = HTMLCanvasElement.prototype.getContext;",
+          "  HTMLCanvasElement.prototype.getContext = function (type, attrs) {",
+          "    var requestedType = String(type || '').toLowerCase();",
+          "    if (requestedType === 'webgl' || requestedType === 'experimental-webgl') {",
+          "      attrs = Object.assign({}, attrs || {});",
+          "      attrs.preserveDrawingBuffer = true;",
+          "      if (!('alpha' in attrs)) attrs.alpha = false;",
+          "    }",
+          "    return originalGetContext.call(this, type, attrs);",
+          "  };",
+          "})();",
+          "<\/script>",
+          "</head>",
+          "<body>",
+          '<div class="jscad-container">',
+          '  <div id="header"><div id="errordiv"></div></div>',
+          '  <div oncontextmenu="return false;" id="viewerContext" design-url="' + safeDesign + '"></div>',
+          '  <div id="tail"><div id="statusdiv"></div></div>',
+          "</div>",
+          "<script>",
+          "window.__VIEWER_CAMERA_OVERRIDE__ = " + cameraJson + ";",
+          "window.__VIEWER_ROTATE_OVERRIDE__ = " + rotateJson + ";",
+          "<\/script>",
+          '<script src="dist/min.js"><\/script>',
+          "<script>",
+          "(function () {",
+          "  var TARGET_CAMERA = " + cameraJson + ";",
+          "  var TARGET_ROTATE = " + rotateJson + ";",
+          "  function initPreview() {",
+          "    if (typeof window.__setPreviewCamera === 'function') window.__setPreviewCamera(TARGET_CAMERA);",
+          "    if (typeof window.__setPreviewRotate === 'function') window.__setPreviewRotate(TARGET_ROTATE);",
+          "  }",
+          "  if (document.readyState === 'loading') {",
+          "    document.addEventListener('DOMContentLoaded', initPreview);",
+          "  } else {",
+          "    initPreview();",
+          "  }",
+          "})();",
+          "<\/script>",
+          "</body>",
+          "</html>"
+        ].join("");
+      }
+
+      function wait(ms) {
+        return new Promise(function (resolve) {
+          window.setTimeout(resolve, ms);
+        });
+      }
+
+      function nextFrame(win) {
+        return new Promise(function (resolve) {
+          (win.requestAnimationFrame || window.requestAnimationFrame).call(win, resolve);
+        });
+      }
+
+      async function waitForPreviewReady(frame, timeoutMs) {
+        var start = Date.now();
+        var stableReadyTicks = 0;
+
+        while (Date.now() - start < timeoutMs) {
+          var doc = null;
+          try {
+            doc = frame.contentDocument;
+          } catch (error) {
+            doc = null;
+          }
+
+          if (doc) {
+            var canvas = doc.querySelector("#viewerContext canvas, canvas");
+            var statusDiv = doc.getElementById("statusdiv");
+            var statusText = statusDiv && statusDiv.textContent ? statusDiv.textContent.replace(/\s+/g, " ").trim() : "";
+            var busy = /\b(loading|processing)\b/i.test(statusText);
+            var hasRenderableCanvas = !!(canvas && canvas.width > 0 && canvas.height > 0);
+
+            if (hasRenderableCanvas && !busy) {
+              stableReadyTicks += 1;
+              if (stableReadyTicks >= 3) return canvas;
+            } else {
+              stableReadyTicks = 0;
+            }
+          }
+
+          await wait(80);
+        }
+
+        throw new Error("The preview canvas did not become ready in time.");
+      }
+
+      function dataUrlToBlob(dataUrl) {
+        var parts = dataUrl.split(",");
+        var mimeMatch = parts[0].match(/data:([^;]+);base64/);
+        var mime = mimeMatch ? mimeMatch[1] : "application/octet-stream";
+        var binary = atob(parts[1]);
+        var len = binary.length;
+        var bytes = new Uint8Array(len);
+        for (var i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
+        return new Blob([bytes], { type: mime });
+      }
+
+      async function blobToUint8Array(blob) {
+        return new Uint8Array(await blob.arrayBuffer());
+      }
+
+      function renderResultsGrid() {
+        resultsGrid.innerHTML = "";
+        if (!generatedResults.length) return;
+
+        generatedResults.forEach(function (item) {
+          var card = document.createElement("article");
+          card.className = "result-card";
+
+          var thumb = document.createElement("div");
+          thumb.className = "result-thumb";
+          var img = document.createElement("img");
+          img.alt = item.title;
+          img.src = item.dataUrl;
+          thumb.appendChild(img);
+
+          var body = document.createElement("div");
+          body.className = "result-body";
+
+          var title = document.createElement("div");
+          title.className = "result-title";
+          title.textContent = "#" + item.cardIndex + " — " + item.title;
+
+          var meta = document.createElement("div");
+          meta.className = "result-meta";
+          meta.textContent = item.filename + " · " + item.width + "×" + item.height;
+
+          var actions = document.createElement("div");
+          actions.className = "result-actions";
+          var link = document.createElement("a");
+          link.href = item.dataUrl;
+          link.download = item.filename;
+          link.textContent = "Download PNG";
+          actions.appendChild(link);
+
+          body.appendChild(title);
+          body.appendChild(meta);
+          body.appendChild(actions);
+          card.appendChild(thumb);
+          card.appendChild(body);
+          resultsGrid.appendChild(card);
+        });
+      }
+
+      function upsertGeneratedResult(entry) {
+        var existingIndex = -1;
+        for (var i = 0; i < generatedResults.length; i += 1) {
+          if (generatedResults[i].cardIndex === entry.cardIndex) {
+            existingIndex = i;
+            break;
+          }
+        }
+        if (existingIndex >= 0) generatedResults[existingIndex] = entry;
+        else generatedResults.push(entry);
+        generatedResults.sort(function (a, b) { return a.cardIndex - b.cardIndex; });
+        renderResultsGrid();
+      }
+
+      async function renderAndCapture(config) {
+        var settleDelay = getActiveSettleDelay();
+
+        captureHost.style.width = config.width + "px";
+        captureHost.style.height = config.height + "px";
+        captureFrame.srcdoc = buildPreviewDocument(config);
+
+        setStatus(
+          "Loading preview document...\n" +
+          "Card: #" + config.cardIndex + " — " + config.title + "\n" +
+          "Model: " + config.modelFile + "\n" +
+          "Camera loaded from viewer.html and rotate forced to false.\n" +
+          "Extra capture delay: " + settleDelay + " ms"
+        );
+
+        var canvas = await waitForPreviewReady(captureFrame, Math.max(4000, getQueryNumber("timeout", 14000)));
+
+        if (settleDelay > 0) {
+          setStatus(
+            "Preview ready. Waiting extra time before capture...\n" +
+            "Card: #" + config.cardIndex + " — " + config.title + "\n" +
+            "Extra capture delay: " + settleDelay + " ms"
+          );
+          await wait(settleDelay);
+        }
+
+        await nextFrame(captureFrame.contentWindow);
+        await nextFrame(captureFrame.contentWindow);
+
+        var dataUrl = "";
+        try {
+          dataUrl = canvas.toDataURL("image/png");
+        } catch (error) {
+          var exportCanvas = document.createElement("canvas");
+          exportCanvas.width = canvas.width;
+          exportCanvas.height = canvas.height;
+          var ctx = exportCanvas.getContext("2d");
+          ctx.drawImage(canvas, 0, 0);
+          dataUrl = exportCanvas.toDataURL("image/png");
+        }
+
+        return {
+          cardIndex: config.cardIndex,
+          title: config.title,
+          filename: config.filename,
+          width: canvas.width,
+          height: canvas.height,
+          dataUrl: dataUrl,
+          blob: dataUrlToBlob(dataUrl)
+        };
+      }
+
+      async function showSelectedCapture() {
+        var result = await renderAndCapture(currentConfig);
+        resultImage.src = result.dataUrl;
+        downloadBtn.href = result.dataUrl;
+        downloadBtn.download = currentConfig.filename;
+        downloadBtn.classList.remove("hidden");
+        upsertGeneratedResult(result);
+
+        setStatus(
+          "PNG generated successfully.\n" +
+          "Card: #" + currentConfig.cardIndex + " — " + currentConfig.title + "\n" +
+          "Output: " + result.width + " × " + result.height + "\n" +
+          "Capture delay used: " + getActiveSettleDelay() + " ms\n" +
+          "Rotate in viewer.html: " + (currentConfig.rotate.originalEnabled ? "true" : "false") + "\n" +
+          "Rotate in viewer_png.html: false"
+        );
+
+        if (getQueryBoolean("download", false)) downloadBtn.click();
+      }
+
+      function updateBatchBadge(text, ok) {
+        batchBadge.textContent = text;
+        batchBadge.classList.remove("hidden");
+        batchBadge.classList.toggle("ok", !!ok);
+      }
+
+      function clearBatchBadge() {
+        batchBadge.classList.add("hidden");
+        batchBadge.classList.remove("ok");
+      }
+
+      function makeCrcTable() {
+        var table = new Uint32Array(256);
+        for (var n = 0; n < 256; n += 1) {
+          var c = n;
+          for (var k = 0; k < 8; k += 1) {
+            c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+          }
+          table[n] = c >>> 0;
+        }
+        return table;
+      }
+
+      var CRC_TABLE = makeCrcTable();
+
+      function crc32(bytes) {
+        var crc = 0xFFFFFFFF;
+        for (var i = 0; i < bytes.length; i += 1) {
+          crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+        }
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+      }
+
+      function dateToDos(date) {
+        var year = Math.max(1980, date.getFullYear());
+        var month = date.getMonth() + 1;
+        var day = date.getDate();
+        var hours = date.getHours();
+        var minutes = date.getMinutes();
+        var seconds = Math.floor(date.getSeconds() / 2);
+
+        return {
+          time: ((hours & 31) << 11) | ((minutes & 63) << 5) | (seconds & 31),
+          date: (((year - 1980) & 127) << 9) | ((month & 15) << 5) | (day & 31)
+        };
+      }
+
+      function concatUint8Arrays(parts, totalLength) {
+        var out = new Uint8Array(totalLength);
+        var offset = 0;
+        for (var i = 0; i < parts.length; i += 1) {
+          out.set(parts[i], offset);
+          offset += parts[i].length;
+        }
+        return out;
+      }
+
+      async function createZipBlob(files) {
+        var encoder = new TextEncoder();
+        var now = dateToDos(new Date());
+        var localParts = [];
+        var centralParts = [];
+        var offset = 0;
+
+        for (var i = 0; i < files.length; i += 1) {
+          var file = files[i];
+          var fileNameBytes = encoder.encode(file.name);
+          var fileBytes = await blobToUint8Array(file.blob);
+          var crc = crc32(fileBytes);
+
+          var local = new Uint8Array(30 + fileNameBytes.length);
+          var localView = new DataView(local.buffer);
+          localView.setUint32(0, 0x04034b50, true);
+          localView.setUint16(4, 20, true);
+          localView.setUint16(6, 0, true);
+          localView.setUint16(8, 0, true);
+          localView.setUint16(10, now.time, true);
+          localView.setUint16(12, now.date, true);
+          localView.setUint32(14, crc, true);
+          localView.setUint32(18, fileBytes.length, true);
+          localView.setUint32(22, fileBytes.length, true);
+          localView.setUint16(26, fileNameBytes.length, true);
+          localView.setUint16(28, 0, true);
+          local.set(fileNameBytes, 30);
+
+          localParts.push(local, fileBytes);
+
+          var central = new Uint8Array(46 + fileNameBytes.length);
+          var centralView = new DataView(central.buffer);
+          centralView.setUint32(0, 0x02014b50, true);
+          centralView.setUint16(4, 20, true);
+          centralView.setUint16(6, 20, true);
+          centralView.setUint16(8, 0, true);
+          centralView.setUint16(10, 0, true);
+          centralView.setUint16(12, now.time, true);
+          centralView.setUint16(14, now.date, true);
+          centralView.setUint32(16, crc, true);
+          centralView.setUint32(20, fileBytes.length, true);
+          centralView.setUint32(24, fileBytes.length, true);
+          centralView.setUint16(28, fileNameBytes.length, true);
+          centralView.setUint16(30, 0, true);
+          centralView.setUint16(32, 0, true);
+          centralView.setUint16(34, 0, true);
+          centralView.setUint16(36, 0, true);
+          centralView.setUint32(38, 0, true);
+          centralView.setUint32(42, offset, true);
+          central.set(fileNameBytes, 46);
+          centralParts.push(central);
+
+          offset += local.length + fileBytes.length;
+        }
+
+        var centralLength = 0;
+        for (var j = 0; j < centralParts.length; j += 1) centralLength += centralParts[j].length;
+
+        var end = new Uint8Array(22);
+        var endView = new DataView(end.buffer);
+        endView.setUint32(0, 0x06054b50, true);
+        endView.setUint16(4, 0, true);
+        endView.setUint16(6, 0, true);
+        endView.setUint16(8, files.length, true);
+        endView.setUint16(10, files.length, true);
+        endView.setUint32(12, centralLength, true);
+        endView.setUint32(16, offset, true);
+        endView.setUint16(20, 0, true);
+
+        var totalLength = end.length;
+        for (var k = 0; k < localParts.length; k += 1) totalLength += localParts[k].length;
+        totalLength += centralLength;
+
+        var zipBytes = concatUint8Arrays(localParts.concat(centralParts, [end]), totalLength);
+        return new Blob([zipBytes], { type: "application/zip" });
+      }
+
+      async function prepareCards() {
+        clearZipDownload();
+        clearBatchBadge();
+
+        var viewerUrl = getViewerSourceUrl();
+        var doc = await fetchViewerDocument(viewerUrl);
+        allConfigs = extractAllConfigs(doc, viewerUrl);
+        var initialIndex = findInitialIndex(allConfigs);
+        populateSelect(allConfigs, initialIndex);
+        setCurrentConfigByIndex(initialIndex);
+
+        setStatus(
+          "Cards loaded successfully.\n" +
+          "Viewer source: " + viewerUrl + "\n" +
+          "Detected cards: " + allConfigs.length + "\n" +
+          "Select a card and generate its PNG, or export all cards into a ZIP.\n" +
+          "Current capture delay: " + getActiveSettleDelay() + " ms"
+        );
+      }
+
+      function setBusy(isBusy) {
+        generateBtn.disabled = isBusy;
+        generateAllBtn.disabled = isBusy;
+        reloadBtn.disabled = isBusy;
+        cardSelect.disabled = isBusy;
+        settleDelayInput.disabled = isBusy;
+      }
+
+      async function runSelectedCapture() {
+        setBusy(true);
+        downloadBtn.classList.add("hidden");
+        clearBatchBadge();
+        try {
+          if (!currentConfig) await prepareCards();
+          await showSelectedCapture();
+        } catch (error) {
+          setStatus("Error generating PNG:\n" + (error && error.message ? error.message : String(error)));
+          throw error;
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function runBatchCapture() {
+        setBusy(true);
+        clearZipDownload();
+        try {
+          if (!allConfigs.length) await prepareCards();
+
+          var activeDelay = getActiveSettleDelay();
+          var zipFiles = [];
+
+          for (var i = 0; i < allConfigs.length; i += 1) {
+            setCurrentConfigByIndex(i);
+            updateBatchBadge("Generating " + (i + 1) + "/" + allConfigs.length, false);
+            setStatus(
+              "Generating all PNGs...\n" +
+              "Current card: #" + allConfigs[i].cardIndex + " — " + allConfigs[i].title + "\n" +
+              "Progress: " + (i + 1) + "/" + allConfigs.length + "\n" +
+              "Capture delay: " + activeDelay + " ms"
+            );
+
+            var result = await renderAndCapture(allConfigs[i]);
+            upsertGeneratedResult(result);
+
+            if (i === currentIndex) {
+              resultImage.src = result.dataUrl;
+              downloadBtn.href = result.dataUrl;
+              downloadBtn.download = allConfigs[i].filename;
+              downloadBtn.classList.remove("hidden");
+            }
+
+            zipFiles.push({ name: allConfigs[i].filename, blob: result.blob });
+          }
+
+          var zipBlob = await createZipBlob(zipFiles);
+          lastZipUrl = URL.createObjectURL(zipBlob);
+          downloadZipBtn.href = lastZipUrl;
+          downloadZipBtn.download = normalizeZipFilename(params.get("zip-filename") || "viewer-previews");
+          downloadZipBtn.classList.remove("hidden");
+          updateBatchBadge("ZIP ready", true);
+
+          setStatus(
+            "All PNGs generated successfully.\n" +
+            "Total cards: " + allConfigs.length + "\n" +
+            "ZIP file: " + downloadZipBtn.download + "\n" +
+            "Capture delay used: " + activeDelay + " ms\n" +
+            "All captures use the original camera of each card with rotate=false."
+          );
+
+          if (getQueryBoolean("download-zip", true)) downloadZipBtn.click();
+        } catch (error) {
+          clearBatchBadge();
+          setStatus("Error generating all PNGs:\n" + (error && error.message ? error.message : String(error)));
+          throw error;
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      cardSelect.addEventListener("change", function () {
+        setCurrentConfigByIndex(Number(cardSelect.value));
+      });
+
+      settleDelayInput.addEventListener("change", syncSettleDelayInUrl);
+      settleDelayInput.addEventListener("input", function () {
+        updateMetaDelay();
+      });
+
+      reloadBtn.addEventListener("click", function () {
+        setBusy(true);
+        prepareCards()
+          .catch(function (error) {
+            setStatus("Initialization error:\n" + (error && error.message ? error.message : String(error)));
+          })
+          .finally(function () {
+            setBusy(false);
+          });
+      });
+
+      generateBtn.addEventListener("click", function () {
+        runSelectedCapture().catch(function () {});
+      });
+
+      generateAllBtn.addEventListener("click", function () {
+        runBatchCapture().catch(function () {});
+      });
+
+      (function initDelayInput() {
+        var initialDelay = getQueryNumber("settle-delay", DEFAULT_SETTLE_DELAY);
+        if (!Number.isFinite(initialDelay) || initialDelay < 0) initialDelay = DEFAULT_SETTLE_DELAY;
+        settleDelayInput.value = String(Math.floor(initialDelay));
+        updateMetaDelay();
+      })();
+
+      prepareCards()
+        .then(function () {
+          if (getQueryBoolean("autogenerate", false)) {
+            return runSelectedCapture();
+          }
+          if (getQueryBoolean("autogenerate-all", false)) {
+            return runBatchCapture();
+          }
+          return null;
+        })
+        .catch(function (error) {
+          setStatus("Initialization error:\n" + (error && error.message ? error.message : String(error)));
+        });
+
+      window.addEventListener("beforeunload", function () {
+        clearZipDownload();
+      });
+    })();
+  </script>
+</body>
+</html>
