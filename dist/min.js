@@ -47446,17 +47446,57 @@ var Processor = require('../jscad/processor');
 
 var gProcessor = null;
 
+function getInitialViewerOptions() {
+  var opts = {};
+
+  if (window.__VIEWER_CAMERA_OVERRIDE__) {
+    opts.camera = window.__VIEWER_CAMERA_OVERRIDE__;
+  }
+
+  if (window.__VIEWER_ROTATE_OVERRIDE__) {
+    opts.rotate = window.__VIEWER_ROTATE_OVERRIDE__;
+  }
+
+  return opts;
+}
+
+function exposeViewerApi() {
+  window.__setPreviewCamera = function (cameraOptions) {
+    if (!gProcessor || !gProcessor.viewer || !gProcessor.viewer.applyCamera) {
+      return false;
+    }
+
+    gProcessor.viewer.applyCamera(cameraOptions || {});
+    return true;
+  };
+
+  window.__setPreviewRotate = function (rotateOptions) {
+    if (!gProcessor || !gProcessor.viewer || !gProcessor.viewer.setRotateOptions) {
+      return false;
+    }
+
+    gProcessor.viewer.setRotateOptions(rotateOptions || {});
+    if (gProcessor.viewer.onDraw) {
+      gProcessor.viewer.onDraw();
+    }
+    return true;
+  };
+}
+
 function init() {
-  var versionText = 'OpenJSCAD.org Version ' + version;
+  var versionText = 'MobilityShield Builder Version ' + version;
   console.log(versionText);
 
-  // Show all exceptions to the user: // WARNING !! this is not practical at dev time
   AlertUserOfUncaughtExceptions();
 
   var viewer = document.getElementById('viewerContext');
   var design = viewer.getAttribute('design-url');
 
-  gProcessor = new Processor(viewer);
+  gProcessor = new Processor(viewer, {
+    viewer: getInitialViewerOptions()
+  });
+
+  exposeViewerApi();
 
   // load the given design
   if (design) {
@@ -47579,19 +47619,28 @@ LightGLEngine.prototype = {
 
     this.handleResize();
   },
-  handleResize: function handleResize() {
-    // Set up the viewport
+  updateProjection: function updateProjection() {
+    if (!this.gl || !this.canvas) return this;
 
     var canvas = this.canvas;
 
-    this.resizeCanvas();
-
-    this.gl.viewport(0, 0, canvas.width, canvas.height); // pixels
+    this.gl.viewport(0, 0, canvas.width, canvas.height);
     this.gl.matrixMode(this.gl.PROJECTION);
     this.gl.loadIdentity();
-    this.gl.perspective(this.options.camera.fov, canvas.width / canvas.height, this.options.camera.clip.min, this.options.camera.clip.max);
+    this.gl.perspective(
+      this.options.camera.fov,
+      canvas.width / canvas.height,
+      this.options.camera.clip.min,
+      this.options.camera.clip.max
+    );
     this.gl.matrixMode(this.gl.MODELVIEW);
 
+    return this;
+  },
+
+  handleResize: function handleResize() {
+    this.resizeCanvas();
+    this.updateProjection();
     this.onDraw();
   },
   createRenderer: function createRenderer() {
@@ -47647,12 +47696,23 @@ LightGLEngine.prototype = {
 
     var _this = this;
 
+    this.rotateAngle = 0;
+
     this.createControls();
     this.resetCamera();
 
     this.gl.ondraw = function () {
       _this.onDraw();
     };
+
+    this.gl.onupdate = function (seconds) {
+      _this.onUpdate(seconds);
+    };
+
+    if (!this._animationLoopStarted && this.gl.animate) {
+      this._animationLoopStarted = true;
+      this.gl.animate();
+    }
 
     // state variables, i.e. used for storing values, etc
 
@@ -47845,6 +47905,22 @@ LightGLEngine.prototype = {
     this.touch.lastY = e.deltaY;
   },
 
+  onUpdate: function onUpdate(seconds) {
+    var rotate = this.options.rotate;
+
+    if (!rotate || !rotate.enabled) return;
+
+    var speed = Number(rotate.speed);
+    if (!Number.isFinite(speed)) speed = 18;
+
+    this.rotateAngle = Number(this.rotateAngle) || 0;
+    this.rotateAngle += speed * seconds;
+
+    if (this.rotateAngle >= 360 || this.rotateAngle <= -360) {
+      this.rotateAngle = this.rotateAngle % 360;
+    }
+  },
+
   onDraw: function onDraw(e) {
     var gl = this.gl;
     gl.makeCurrent();
@@ -47856,6 +47932,25 @@ LightGLEngine.prototype = {
     gl.rotate(this.angleX, 1, 0, 0);
     gl.rotate(this.angleY, 0, 1, 0);
     gl.rotate(this.angleZ, 0, 0, 1);
+
+    var rotate = this.options.rotate || {};
+    var rotateOrigin = rotate.origin || { x: 0, y: 0, z: 0 };
+    var rotateAngle = Number(this.rotateAngle) || 0;
+
+    if (rotate.enabled && rotateAngle) {
+      gl.translate(rotateOrigin.x || 0, rotateOrigin.y || 0, rotateOrigin.z || 0);
+
+      var axis = (rotate.axis || 'y').toLowerCase();
+      if (axis === 'x') {
+        gl.rotate(rotateAngle, 1, 0, 0);
+      } else if (axis === 'z') {
+        gl.rotate(rotateAngle, 0, 0, 1);
+      } else {
+        gl.rotate(rotateAngle, 0, 1, 0);
+      }
+
+      gl.translate(-(rotateOrigin.x || 0), -(rotateOrigin.y || 0), -(rotateOrigin.z || 0));
+    }
     // draw the solid (meshes)
     if (this.options.solid.draw) {
       gl.enable(gl.BLEND);
@@ -48051,6 +48146,9 @@ function Viewer(containerelement, options) {
   if ('camera' in options) {
     this.setCameraOptions(options['camera']);
   }
+  if ('rotate' in options) {
+    this.setRotateOptions(options['rotate']);
+  }
   if ('plate' in options) {
     this.setPlateOptions(options['plate']);
   }
@@ -48104,6 +48202,12 @@ Viewer.defaults = function () {
       position: { x: 0, y: 0, z: 100 }, // initial position at XYZ
       clip: { min: 0.5, max: 1000 // rendering outside this range is clipped
       } },
+	rotate: {
+      enabled: false,
+      axis: 'y',
+      speed: 18,
+      origin: { x: 0, y: 0, z: 0 }
+    },
     plate: {
       draw: true, // draw or not
       size: 200, // plate size (X and Y)
@@ -48139,7 +48243,7 @@ Viewer.defaults = function () {
       faces: true,
       overlay: false, // use overlay when drawing lines or not
       smooth: false, // use smoothing or not
-      faceColor: { r: 1.0, g: 0.4, b: 1.0, a: 1.0 }, // default face color
+      faceColor: { r: 0.0, g: 0.65, b: 1.0, a: 1.0 }, // default face color
       outlineColor: { r: 0.0, g: 0.0, b: 0.0, a: 0.1 // default outline color
       } },
     background: {
@@ -48190,30 +48294,82 @@ Viewer.prototype = {
     this.onDraw();
   },
 
-  resetCamera: function resetCamera() {
-    // reset perpective (camera) to initial settings
-    this.angleX = this.options.camera.angle.x;
-    this.angleY = this.options.camera.angle.y;
-    this.angleZ = this.options.camera.angle.z;
-    this.viewpointX = this.options.camera.position.x;
-    this.viewpointY = this.options.camera.position.y;
-    this.viewpointZ = this.options.camera.position.z;
-    this.onDraw();
-  },
+	resetCamera: function resetCamera() {
+	  return this.applyCamera(this.options.camera);
+	},
 
-  supported: function supported() {
-    return !!this.gl;
-  },
+	supported: function supported() {
+	  return !!this.gl;
+	},
 
-  setCameraOptions: function setCameraOptions(options) {
-    options = options || {};
-    // apply all options found
-    for (var x in this.options.camera) {
-      if (x in options) {
-        this.options.camera[x] = options[x];
-      }
-    }
-  },
+	setCameraOptions: function setCameraOptions(options) {
+	  options = options || {};
+
+	  if ('fov' in options && Number.isFinite(Number(options.fov))) {
+		this.options.camera.fov = Number(options.fov);
+	  }
+
+	  if ('angle' in options && options.angle) {
+		this.options.camera.angle = Object.assign({}, this.options.camera.angle, options.angle);
+	  }
+
+	  if ('position' in options && options.position) {
+		this.options.camera.position = Object.assign({}, this.options.camera.position, options.position);
+	  }
+
+	  if ('clip' in options && options.clip) {
+		this.options.camera.clip = Object.assign({}, this.options.camera.clip, options.clip);
+	  }
+
+	  return this;
+	},
+
+	setRotateOptions: function setRotateOptions(options) {
+	  options = options || {};
+
+	  if ('enabled' in options) {
+		this.options.rotate.enabled = !!options.enabled;
+	  }
+
+	  if ('axis' in options && typeof options.axis === 'string') {
+		var axis = options.axis.toLowerCase();
+		if (axis === 'x' || axis === 'y' || axis === 'z') {
+		  this.options.rotate.axis = axis;
+		}
+	  }
+
+	  if ('speed' in options) {
+		var speed = Number(options.speed);
+		if (Number.isFinite(speed)) {
+		  this.options.rotate.speed = speed;
+		}
+	  }
+
+	  if ('origin' in options && options.origin) {
+		this.options.rotate.origin = Object.assign({}, this.options.rotate.origin, options.origin);
+	  }
+
+	  return this;
+	},
+
+	applyCamera: function applyCamera(options) {
+	  options = options || {};
+
+	  this.setCameraOptions(options);
+
+	  this.angleX = this.options.camera.angle.x;
+	  this.angleY = this.options.camera.angle.y;
+	  this.angleZ = this.options.camera.angle.z;
+
+	  this.viewpointX = this.options.camera.position.x;
+	  this.viewpointY = this.options.camera.position.y;
+	  this.viewpointZ = this.options.camera.position.z;
+
+	  this.updateProjection();
+	  this.onDraw();
+
+	  return this;
+	},
 
   setPlateOptions: function setPlateOptions(options) {
     options = options || {};

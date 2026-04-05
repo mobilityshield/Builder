@@ -92826,7 +92826,7 @@ arguments[4][117][0].apply(exports,arguments)
 },{"dup":117}],367:[function(require,module,exports){
 module.exports={
   "name": "@jscad/web",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "Web UI for OpenJsCAD",
   "repository": "https://github.com/jscad/OpenJSCAD.org",
   "scripts": {
