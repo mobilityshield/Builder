@@ -93444,6 +93444,7 @@ Processor.prototype = {
     var instantUpdateCheckbox = document.createElement('input');
     instantUpdateCheckbox.type = 'checkbox';
     instantUpdateCheckbox.id = 'instantUpdate';
+	instantUpdateCheckbox.checked = true;
     this.parametersdiv.appendChild(instantUpdateCheckbox);
 
     element = document.getElementById('instantUpdateLabel');
@@ -93634,9 +93635,12 @@ Processor.prototype = {
 
     var prevParamValues = {};
     // this will fail without existing form
-    try {
-      prevParamValues = getParameterValues(this.paramControls, /* onlyChanged */true);
-    } catch (e) {}
+	var sameModel = this.filename && filename && this.filename === filename;
+	if (sameModel) {
+      try {
+        prevParamValues = getParameterValues(this.paramControls, /* onlyChanged */true);
+      } catch (e) {}
+	}
 
     this.abort();
     this.paramDefinitions = [];
@@ -94813,12 +94817,12 @@ var examples = [
 				// Plates
 				{ file: 'plate.jscad', title: 'Rectangular Plate' }, 
 				{ file: 'rectangular-frame.jscad', title: 'Rectangular Frame', new: true },
-				{ file: 'L-plate.jscad', title: 'L Plate' }, 
-				{ file: 'triangular-plate.jscad', title: 'Triangular Plate' },
-				{ file: 'Circular-plate.jscad', title: 'Circular Plate', new: true },
-				{ file: 'cross-plate-v2.jscad', title: 'Cross Plate', new: true },
-				{ file: 'T-plate-catalog-v2.jscad', title: 'T Plate', new: true },
+				{ file: 'triangular-plate.jscad', title: 'Triangular Plate' },	
 				{ file: 'trapezoidal-plate-v2.jscad', title: 'Trapezoidal Plate', new: true },
+				{ file: 'circular-plate.jscad', title: 'Circular Plate', new: true },
+				{ file: 'cross-plate.jscad', title: 'X Cross Plate', new: true },
+				{ file: 'L-plate.jscad', title: 'L Plate' }, 
+				{ file: 'T-plate.jscad', title: 'T Plate', new: true },
 				{ file: 'U-plate-v3.jscad', title: 'U Plate', new: true },
 
 				// Strips
@@ -95200,7 +95204,7 @@ function init() {
         list[i].addEventListener('click', onLoadExampleClicked);
       }
     }
-
+/** Old left menu handle
     var _menuHandle = document.getElementById('menuHandle');
     _menuHandle.addEventListener('click', function (e) {
       if (initialMenuHidingTimeoutID !== null) {
@@ -95223,6 +95227,42 @@ function init() {
         }
       }
     });
+**/
+	var _menuHandle = document.getElementById('menuHandle');
+
+	var closeLeftMenu = function closeLeftMenu() {
+	  menu.style.left = '-280px';
+	  _menuHandle.src = 'imgs/menuHandleVLOut.png';
+	  if (examples) {
+		setElementHeight(examples, '0px');
+		examples.style.display = 'none';
+	  }
+	};
+
+	var openLeftMenu = function openLeftMenu() {
+	  menu.style.left = '0';
+	  _menuHandle.src = 'imgs/menuHandleVLIn.png';
+	};
+
+	_menuHandle.addEventListener('click', function (e) {
+	  if (initialMenuHidingTimeoutID !== null) {
+		clearTimeout(initialMenuHidingTimeoutID);
+		initialMenuHidingTimeoutID = null;
+	  }
+
+	  if (menu.style.left === '-280px') {
+		openLeftMenu();
+	  } else {
+		closeLeftMenu();
+	  }
+	});
+
+	document.addEventListener('click', function (e) {
+	  if (menu.style.left !== '-280px' && !menu.contains(e.target)) {
+		closeLeftMenu();
+	  }
+	});
+
   }
 
   if (editFrame) {
