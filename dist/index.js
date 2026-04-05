@@ -94809,18 +94809,43 @@ var examples = [{ file: 'logo.jscad', title: 'OpenJSCAD.org Logo' }, { file: 'lo
 { file: 'transformations.jscad', title: 'Transformations', spacing: true }, { file: 'lookup.jscad', title: 'Lookup()' }, { file: 'expand.jscad', title: 'Expand()' }, { file: 'rectangular_extrude.jscad', title: 'Rectangular_extrude()' }, { file: 'linear_extrude.jscad', title: 'Linear_extrude()' }, { file: 'rotate_extrude.jscad', title: 'Rotate_extrude()' }, { file: 'polyhedron.jscad', title: 'Polyhedron()' }, { file: 'hull.jscad', title: 'Hull()' }, { file: 'chain_hull.jscad', title: 'Chain_hull()' }, { file: 'torus.jscad', title: 'Torus()' }, { file: 'text.jscad', title: 'Vector_text()', spacing: true }, { file: 'transparency.jscad', title: 'Transparency', spacing: true }, { file: 'transparency.amf', title: 'Transparency', type: 'AMF' }, { file: 'transparency2.jscad', title: 'Transparency 2' }, { file: 'slices/double-screw.jscad', title: 'SolidFromSlices(): Double Screw', spacing: true }, { file: 'slices/four2three.jscad', title: 'SolidFromSlices(): 4 to 3' }, { file: 'slices/four2three-round.jscad', title: 'SolidFromSlices(): 4 to 3 round' }, { file: 'slices/spring.jscad', title: 'SolidFromSlices(): Spring' }, { file: 'slices/tor.jscad', title: 'SolidFromSlices(): Tor (multi-color)' }, { file: 'slices/rose.jscad', title: 'SolidFromSlices(): Rose Curve' }, { file: 'servo.jscad', title: 'Interactive Params: Servo Motor', wrap: true }, { file: 'gear.jscad', title: 'Interactive Params: Gear' }, { file: 's-hook.jscad', title: 'Interactive Params: S Hook' }, { file: 'grille.jscad', title: 'Interactive Params: Grille' }, { file: 'axis-coupler.jscad', title: 'Interactive Params: Axis Coupler' }, { file: 'lamp-shade.jscad', title: 'Interactive Params: Lamp Shade' }, { file: 'celtic-knot-ring.jscad', title: 'Interactive Params: Celtic Knot Ring' }, { file: 'stepper-motor.jscad', title: 'Interactive Params: Stepper Motor' }, { file: 'iphone4-case.jscad', title: 'Interactive Params: iPhone4 Case' }, { file: 'name_plate.jscad', title: 'Interactive Params: Name Plate' }, { file: 'balloons.jscad', title: 'Interactive Params: Balloons' }, { file: 'globe.jscad', title: 'Include(): Globe', spacing: true }, { file: 'platonics/', title: 'Recursive Include(): Platonics' }, { file: 'babypanda2.svg', title: 'SVG Image: Baby Panda', spacing: true }, { file: '3d_sculpture-VernonBussler.stl', title: '3D Model: 3D Sculpture (Vernon Bussler)', type: 'STL', spacing: true }, { file: 'frog-OwenCollins.stl', title: '3D Model: Frog (Owen Collins)', type: 'STL' }, { file: 'thing_7-Zomboe.stl', title: '3D Model: Thing 7 / Flower (Zomboe)', type: 'STL' }, { file: 'yoda-RichRap.stl', title: '3D Model: Yoda (RichRap)', type: 'STL' }, { file: 'feathers_mcgraw.stl', title: '3D Model: Feathers Mcgraw (q1g0ng)', type: 'STL' }];
 **/
 
-var examples = [{ file: 'plate.jscad', title: 'Perforated Plates' }, 
-				{ file: 'strip.jscad', title: 'Perforated Stripes' }, 
-				{ file: 'L-plate.jscad', title: 'Perforated "L" Plates'}, 
-				{ file: 'triangular-plate.jscad', title: 'Perforated Triangular Plates', type: 'beta' },
-				
-				{ file: 'gear.jscad', title: 'Gear', spacing: true },
-				{ file: 'miniprofile.jscad', title: 'Extruded Profile 15x15'},
-				
-				{ file: 'stl/wheel-hex_M3TAP.stl', title: 'Whell Hex (for M3 tap)', type: 'STL', wrap: true, new: true}
-				
-// NEW and spaceing part { file: '***.jscad', title: '***', type: '***', spacing: true , new: true},
+var examples = [
+				// Plates
+				{ file: 'plate.jscad', title: 'Rectangular Plate' }, 
+				{ file: 'rectangular-frame.jscad', title: 'Rectangular Frame', new: true },
+				{ file: 'L-plate.jscad', title: 'L Plate' }, 
+				{ file: 'triangular-plate.jscad', title: 'Triangular Plate' },
+				{ file: 'Circular-plate.jscad', title: 'Circular Plate', new: true },
+				{ file: 'cross-plate-v2.jscad', title: 'Cross Plate', new: true },
+				{ file: 'T-plate-catalog-v2.jscad', title: 'T Plate', new: true },
+				{ file: 'trapezoidal-plate-v2.jscad', title: 'Trapezoidal Plate', new: true },
+				{ file: 'U-plate-v3.jscad', title: 'U Plate', new: true },
 
+				// Strips
+				{ file: 'strip.jscad', title: 'Strip', spacing: true }, 
+				{ file: 'Strip-with-slots.jscad', title: 'Strip with Slots', new: true },
+				{ file: 'Circular-stripe.jscad', title: 'Circular Strip', new: true },
+				{ file: 'Curved-strip.jscad', title: 'Curved Strip', new: true },
+				{ file: 'Curved-strip-with-slots.jscad', title: 'Curved Strip with Slots', new: true },
+
+				// Brackets / Braces / Girders
+				{ file: 'Angle-Bracket.jscad', title: 'Angle Bracket', spacing: true, new: true },
+				{ file: 'Angle-girder.jscad', title: 'Angle Girder', new: true },
+				{ file: 'Corner-brace-square.jscad', title: 'Corner Brace Square', new: true },
+				{ file: 'Corner-brace-triangular.jscad', title: 'Corner Brace Triangular', new: true },
+				{ file: 'Flanged-Plate.jscad', title: 'Flanged Plate', new: true },
+
+				// Volumes
+				{ file: 'open-box.jscad', title: 'Open Box', spacing: true, new: true },
+
+				// Mechanical / Profiles
+				{ file: 'gear.jscad', title: 'Gear', wrap: true, spacing: true },
+				{ file: 'miniprofile.jscad', title: 'Extruded Profile 15x15', type: 'Beta' },
+
+				// STL
+				{ file: 'stl/wheel-hex_M3TAP.stl', title: 'Whell Hex (for M3 tap)', type: 'STL', spacing: true }
+
+// NEW and spaceing part { file: '***.jscad', title: '***', type: '***', spacing: true , new: true},
 ];
 
 function createExamples(me) {
