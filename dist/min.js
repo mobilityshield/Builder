@@ -1,4 +1,4 @@
-(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+(function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
 const WebWorkify = require('webworkify')
 const { CAG, CSG } = require('@jscad/csg')
 const oscad = require('@jscad/csg/api')
@@ -110,7 +110,7 @@ module.exports = {
   rebuildSolidsInWorker
 }
 
-},{"../code-loading/jscad-function":2,"../code-loading/jscad-worker.js":3,"../code-loading/replaceIncludes":4,"../code-loading/resolveIncludesHttp":5,"../utils/arrays":104,"@jscad/csg":12,"@jscad/csg/api":11,"webworkify":98}],2:[function(require,module,exports){
+},{"../code-loading/jscad-function":2,"../code-loading/jscad-worker.js":3,"../code-loading/replaceIncludes":4,"../code-loading/resolveIncludesHttp":5,"../utils/arrays":120,"@jscad/csg":18,"@jscad/csg/api":17,"webworkify":114}],2:[function(require,module,exports){
 /**
  * Create an function for processing the JSCAD script into CSG/CAG objects
  * @param {String} script the script
@@ -197,7 +197,7 @@ module.exports = function (self) {
   }
 }
 
-},{"../utils/arrays":104,"./jscad-function":2,"@jscad/csg":12,"@jscad/csg/api":11}],4:[function(require,module,exports){
+},{"../utils/arrays":120,"./jscad-function":2,"@jscad/csg":18,"@jscad/csg/api":17}],4:[function(require,module,exports){
 const esprima = require('esprima')
 const estraverse = require('estraverse')
 const astring = require('astring')
@@ -320,7 +320,7 @@ module.exports = {
   replaceIncludes
 }
 
-},{"astring":93,"esprima":94,"estraverse":95}],5:[function(require,module,exports){
+},{"astring":108,"esprima":109,"estraverse":110}],5:[function(require,module,exports){
 /**
  * fetch the requested script either via MemFs or HTTP Request
  * (Note: The resolved modules are prepepended in front of the calling script
@@ -378,7 +378,7 @@ module.exports = {
   convertToBlob
 }
 
-},{"@jscad/io":75}],7:[function(require,module,exports){
+},{"@jscad/io":90}],7:[function(require,module,exports){
 const { isCSG, isCAG } = require('@jscad/csg')
 
 // handled format descriptions
@@ -427,7 +427,7 @@ const formats = {
     description: 'AutoCAD Drawing Exchange Format',
     extension: 'dxf',
     mimetype: 'application/dxf',
-    convertCSG: false,
+    convertCSG: true,
     convertCAG: true },
   jscad: {
     displayName: 'JSCAD',
@@ -471,6 +471,7 @@ const conversionFormats = [
   'obj',
   'scad',
   'stl',
+  'dxf',
 // 2D file formats
   'svg'
 ]
@@ -501,7 +502,7 @@ module.exports = {
   supportedFormatsForObjects
 }
 
-},{"@jscad/csg":12}],8:[function(require,module,exports){
+},{"@jscad/csg":18}],8:[function(require,module,exports){
 const { formats } = require('./formats')
 const {mergeSolids2} = require('../utils/mergeSolids')
 
@@ -563,7 +564,198 @@ module.exports = {
   prepareOutput
 }
 
-},{"../utils/mergeSolids":105,"./formats":7,"@jscad/io":75}],9:[function(require,module,exports){
+},{"../utils/mergeSolids":121,"./formats":7,"@jscad/io":90}],9:[function(require,module,exports){
+const inchMM = (1 / 0.039370) // used for scaling AMF (inch) to CAG coordinates(MM)
+
+module.exports = {inchMM}
+
+},{}],10:[function(require,module,exports){
+const {CSG} = require('@jscad/csg')
+
+const createObject = require('./objectBuilder')
+const parse = require('./parse')
+
+const deserializeToCSG = function (src, filename, options) {
+  filename = filename || 'amf'
+  const defaults = {pxPmm: require('./constants').pxPmm, version: '0.0.0', addMetaData: true}
+  options = Object.assign({}, defaults, options)
+  const {pxPmm} = options
+
+  // parse the AMF data
+  const {amfObj, amfMaterials, amfTextures, amfConstels} = parse(src, pxPmm)
+  if (!amfObj) {
+    throw new Error('AMF parsing failed, no valid amf data retrieved')
+  }
+
+  return objectify(amfObj, {amfMaterials, amfTextures, amfConstels})
+}
+
+const objectify = (amf, data) => {
+  let objects = amf.objects
+  const csgs = objects.map((object, index) => object.type === 'object' ? createObject(object, index, data, {amf, csg: true}) : undefined)
+  return new CSG().union(csgs)
+}
+
+module.exports = deserializeToCSG
+
+},{"./constants":9,"./objectBuilder":13,"./parse":14,"@jscad/csg":18}],11:[function(require,module,exports){
+function amfMesh (element) {
+  let obj = {type: 'mesh'}
+  obj.objects = []
+  return obj
+}
+
+// Note: TBD Vertices can have a color, which is used to interpolate a face color (from the 3 vertices)
+function amfVertices (element) {
+  let obj = {type: 'vertices'}
+  obj.objects = []
+  return obj
+}
+
+function amfCoordinates (element) {
+  let obj = {type: 'coordinates'}
+  obj.objects = []
+  return obj
+}
+function amfNormal (element) {
+  let obj = {type: 'normal'}
+  obj.objects = []
+  return obj
+}
+function amfX (element) {
+  return {type: 'x', value: '0'}
+}
+function amfY (element) {
+  return {type: 'y', value: '0'}
+}
+function amfZ (element) {
+  return {type: 'z', value: '0'}
+}
+
+function amfVolume (element) {
+  let obj = {type: 'volume'}
+
+  if ('MATERIALID' in element) { obj.materialid = element.MATERIALID }
+
+  obj.objects = []
+  return obj
+}
+
+function amfTriangle (element) {
+  let obj = {type: 'triangle'}
+  obj.objects = []
+  return obj
+}
+function amfV1 (element) {
+  return {type: 'v1', value: '0'}
+}
+function amfV2 (element) {
+  return {type: 'v2', value: '0'}
+}
+function amfV3 (element) {
+  return {type: 'v3', value: '0'}
+}
+
+function amfVertex (element) {
+  let obj = {type: 'vertex'}
+  obj.objects = []
+  return obj
+}
+
+function amfEdge (element) {
+  let obj = {type: 'edge'}
+
+  obj.objects = []
+  return obj
+}
+
+function amfMetadata (element) {
+  let obj = {type: 'metadata'}
+
+  if ('TYPE' in element) { obj.mtype = element.TYPE }
+  if ('ID' in element) { obj.id = element.ID }
+
+  return obj
+}
+
+function amfMaterial (element) {
+  let obj = {type: 'material'}
+
+  if ('ID' in element) { obj.id = element.ID }
+
+  obj.objects = []
+  return obj
+}
+
+function amfColor (element) {
+  let obj = {type: 'color'}
+
+  obj.objects = []
+  return obj
+}
+function amfR (element) {
+  return {type: 'r', value: '1'}
+}
+function amfG (element) {
+  return {type: 'g', value: '1'}
+}
+function amfB (element) {
+  return {type: 'b', value: '1'}
+}
+function amfA (element) {
+  return {type: 'a', value: '1'}
+}
+
+function amfMap (element) {
+  let obj = {type: 'map'}
+
+  if ('GTEXID' in element) { obj.gtexid = element.GTEXID }
+  if ('BTEXID' in element) { obj.btexid = element.BTEXID }
+  if ('RTEXID' in element) { obj.rtexid = element.RTEXID }
+
+  obj.objects = []
+  return obj
+}
+
+function amfU1 (element) {
+  return {type: 'u1', value: '0'}
+}
+function amfU2 (element) {
+  return {type: 'u2', value: '0'}
+}
+function amfU3 (element) {
+  return {type: 'u3', value: '0'}
+}
+
+module.exports = {
+  amfMesh,
+  amfVertices,
+  amfCoordinates,
+  amfX,
+  amfY,
+  amfZ,
+  amfNormal,
+  amfVolume,
+  amfTriangle,
+  amfV1,
+  amfV2,
+  amfV3,
+  amfVertex,
+  amfEdge,
+  amfMetadata,
+  amfMaterial,
+  amfColor,
+  amfR,
+  amfG,
+  amfB,
+  amfA,
+  amfMap,
+  amfU1,
+  amfU2,
+  amfU3
+}
+
+},{}],12:[function(require,module,exports){
 /*
 ## License
 
@@ -586,26 +778,258 @@ History:
 // See http://amf.wikispaces.com/
 //
 // //////////////////////////////////////////
+const translate = require('./translate')
+const deserializeToCSG = require('./deserialize')
+
+/**
+ * Parse the given AMF source (xml) and return either a JSCAD script or a CSG/CAG object
+ * @param {string} input amf data
+ * @param {string} filename (optional) original filename of AMF source
+ * @param {object} options options (optional) anonymous object with:
+ * @param {string} [options.version='0.0.0'] version number to add to the metadata
+ * @param {boolean} [options.addMetadata=true] toggle injection of metadata (producer, date, source) at the start of the file
+ * @param {string} [options.output='jscad'] {String} either jscad or csg to set desired output
+ * @return {CSG/string} either a CAG/CSG object or a string (jscad script)
+ */
+const deserialize = function (input, filename, options) {
+  const defaults = {
+    output: 'jscad'
+  }
+  options = Object.assign({}, defaults, options)
+  return options.output === 'jscad' ? translate(input, filename, options) : deserializeToCSG(input, filename, options)
+}
+
+module.exports = {
+  deserialize
+}
+
+},{"./deserialize":10,"./translate":15}],13:[function(require,module,exports){
+function findMaterial (materials, id) {
+  let lastmaterial = null // FIXME: shoud this be outside this scope ?
+
+  if (lastmaterial && lastmaterial.id === id) return lastmaterial
+  for (let i = 0; i < materials.length; i++) {
+    if (materials[i].id && materials[i].id === id) {
+      lastmaterial = materials[i]
+      return lastmaterial
+    }
+  }
+  return null
+}
+
+function getValue (objects, type) {
+  for (let i = 0; i < objects.length; i++) {
+    if (objects[i].type === type) return objects[i].value
+  }
+  return null
+}
+function getColor (objects) {
+  for (let i = 0; i < objects.length; i++) {
+    let obj = objects[i]
+    if (obj.type === 'color') {
+      let r = parseFloat(getValue(obj.objects, 'r'))
+      let g = parseFloat(getValue(obj.objects, 'g'))
+      let b = parseFloat(getValue(obj.objects, 'b'))
+      let a = parseFloat(getValue(obj.objects, 'a'))
+      if (Number.isNaN(r)) r = 1.0 // AMF default color
+      if (Number.isNaN(g)) g = 1.0
+      if (Number.isNaN(b)) b = 1.0
+      if (Number.isNaN(a)) a = 1.0
+      return [r, g, b, a]
+    }
+  }
+  return null
+}
+
+function findColorByMaterial (materials, id) {
+  let m = findMaterial(materials, id)
+  if (m) {
+    return getColor(m.objects)
+  }
+  return null
+}
+
+// convert all objects to CSG based code
+function createObject (obj, index, data, options) {
+  let vertices = [] // [x,y,z]
+  let faces = [] // [v1,v2,v3]
+  let colors = [] // [r,g,b,a]
+
+  function addCoord (coord, cidx) {
+    if (coord.type === 'coordinates') {
+      // console.log('coords', coord.objects)
+      let x = parseFloat(getValue(coord.objects, 'x'))
+      let y = parseFloat(getValue(coord.objects, 'y'))
+      let z = parseFloat(getValue(coord.objects, 'z'))
+      // console.log('[' + x + ',' + y + ',' + z + ']')
+      vertices.push([x, y, z])
+    }
+    // normal is possible
+  }
+  function addVertex (vertex, vidx) {
+    if (vertex.type === 'vertex') {
+      vertex.objects.map(addCoord)
+    }
+    // edge is possible
+  }
+  function addTriangle (tri, tidx) {
+    if (tri.type === 'triangle') {
+      let v1 = parseInt(getValue(tri.objects, 'v1'))
+      let v2 = parseInt(getValue(tri.objects, 'v2'))
+      let v3 = parseInt(getValue(tri.objects, 'v3'))
+      // console.log('['+v1+','+v2+','+v3+']');
+      faces.push([v1, v2, v3]) // HINT: reverse order for polyhedron()
+      let c = getColor(tri.objects)
+      if (c) {
+        colors.push(c)
+      } else {
+        colors.push(tricolor)
+      }
+    }
+  }
+  let tricolor = null // for found colors
+  function addPart (part, pidx) {
+    // console.log(part.type);
+    switch (part.type) {
+      case 'vertices':
+        part.objects.map(addVertex, data)
+        break
+      case 'volume':
+        tricolor = getColor(part.objects)
+        if (part.materialid) {
+        // convert material to color
+          tricolor = findColorByMaterial(part.materialid)
+        }
+        part.objects.map(addTriangle, data)
+        break
+      default:
+        break
+    }
+  }
+  function addMesh (mesh, midx) {
+    // console.log(mesh.type);
+    if (mesh.type === 'mesh') {
+      mesh.objects.map(addPart, data)
+    }
+  }
+
+  // const output =
+  if (options.csg === true) {
+    const {CSG} = require('@jscad/csg')
+    const scale = options.amf.scale
+    const vertex = scale !== 1.0 ? ([x, y, z]) => new CSG.Vertex(new CSG.Vector3D(x * scale, y * scale, z * scale))
+      : ([x, y, z]) => new CSG.Vertex(new CSG.Vector3D(x, y, z))
+    const polygon = a => new CSG.Polygon(a)
+
+    obj.objects.map(addMesh, data)
+    let polys = []
+
+    let fcount = faces.length
+    let vcount = vertices.length
+    // console.log('here', fcount, vcount)
+
+    for (let i = 0; i < fcount; i++) {
+      let subData = []
+      for (let j = 0; j < faces[i].length; j++) {
+        if (faces[i][j] < 0 || faces[i][j] >= vcount) {
+          // if (err.length === '') err += 'bad index for vertice (out of range)'
+          continue
+        }
+        // console.log('bla', vertices[faces[i][j]])
+
+        subData.push(vertex(vertices[faces[i][j]]))
+      }
+      const color = colors[i] ? colors[i] : undefined
+      const polygonData = color ? polygon(subData).setColor([color[0], color[1], color[2], color[3]]) : polygon(subData)
+      polys.push(polygonData)
+    }
+    return CSG.fromPolygons(polys)
+  }
+
+  let code = ''
+  if (obj.objects.length > 0) {
+    obj.objects.map(addMesh, data)
+
+    let fcount = faces.length
+    let vcount = vertices.length
+
+    code += `// Object ${obj.id}
+//  faces   : ${fcount}
+//  vertices: ${vcount}
+function createObject${obj.id}() {
+  let polys = [];
+`
+
+    // convert the results into function calls
+    for (let i = 0; i < fcount; i++) {
+      code += '  polys.push(\n'
+      code += '    PP([\n'
+      for (let j = 0; j < faces[i].length; j++) {
+        if (faces[i][j] < 0 || faces[i][j] >= vcount) {
+          // if (err.length === '') err += 'bad index for vertice (out of range)'
+          continue
+        }
+        if (j) code += ',\n'
+        code += '      VV(' + vertices[faces[i][j]] + ')'
+      }
+      code += '])'
+      if (colors[i]) {
+        let c = colors[i]
+        code += '.setColor([' + c[0] + ',' + c[1] + ',' + c[2] + ',' + c[3] + '])'
+      }
+      code += ');\n'
+    }
+    code += '  return CSG.fromPolygons(polys);\n'
+    code += '}\n'
+  }
+  return code
+}
+
+module.exports = createObject
+
+},{"@jscad/csg":18}],14:[function(require,module,exports){
 const sax = require('sax')
+const {amfMesh,
+amfVertices,
+amfCoordinates,
+amfX,
+amfY,
+amfZ,
+amfNormal,
+amfVolume,
+amfTriangle,
+amfV1,
+amfV2,
+amfV3,
+amfVertex,
+amfEdge,
+amfMetadata,
+amfMaterial,
+amfColor,
+amfR,
+amfG,
+amfB,
+amfA,
+amfMap,
+amfU1,
+amfU2,
+amfU3} = require('./helpers')
+const {inchMM} = require('./constants')
 
-const inchMM = (1 / 0.039370) // used for scaling AMF (inch) to CAG coordinates(MM)
-
-// processing controls
-sax.SAXParser.prototype.amfLast = null // last object found
-sax.SAXParser.prototype.amfDefinition = 0 // definitions beinging created
+let amfLast = null // last object found
+let amfDefinition = 0 // definitions beinging created
 // 0-AMF,1-object,2-material,3-texture,4-constellation,5-metadata
 // high level elements / definitions
-sax.SAXParser.prototype.amfObjects = [] // list of objects
-sax.SAXParser.prototype.amfMaterials = [] // list of materials
-sax.SAXParser.prototype.amfTextures = [] // list of textures
-sax.SAXParser.prototype.amfConstels = [] // list of constellations
-sax.SAXParser.prototype.amfMetadata = [] // list of metadata
-
-sax.SAXParser.prototype.amfObj = null // amf in object form
+let amfObjects = [] // list of objects
+let amfMaterials = [] // list of materials
+let amfTextures = [] // list of textures
+let amfConstels = [] // list of constellations
+// let amfMetadata = [] // list of metadata
+let amfObj = null // amf in object form
 
 function amfAmf (element) {
   // default SVG with no viewport
-  var obj = {type: 'amf', unit: 'mm', scale: 1.0}
+  let obj = {type: 'amf', unit: 'mm', scale: 1.0}
 
   if ('UNIT' in element) { obj.unit = element.UNIT.toLowerCase() }
   // set scaling
@@ -631,324 +1055,131 @@ function amfAmf (element) {
   return obj
 }
 
-sax.SAXParser.prototype.amfObject = function (element) {
-  var obj = {type: 'object', id: 'JSCAD' + (this.amfObjects.length)} // default ID
+const amfObject = function (element) {
+  let obj = {type: 'object', id: 'JSCAD' + (amfObjects.length)} // default ID
 
   if ('ID' in element) { obj.id = element.ID }
 
   obj.objects = []
   return obj
-}
-
-function amfMesh (element) {
-  var obj = {type: 'mesh'}
-
-  obj.objects = []
-  return obj
-}
-
-// Note: TBD Vertices can have a color, which is used to interpolate a face color (from the 3 vertices)
-function amfVertices (element) {
-  var obj = {type: 'vertices'}
-  obj.objects = []
-  return obj
-}
-
-function amfCoordinates (element) {
-  var obj = {type: 'coordinates'}
-
-  obj.objects = []
-  return obj
-}
-function amfNormal (element) {
-  var obj = {type: 'normal'}
-
-  obj.objects = []
-  return obj
-}
-function amfX (element) {
-  return {type: 'x', value: '0'}
-}
-function amfY (element) {
-  return {type: 'y', value: '0'}
-}
-function amfZ (element) {
-  return {type: 'z', value: '0'}
-}
-
-function amfVolume (element) {
-  var obj = {type: 'volume'}
-
-  if ('MATERIALID' in element) { obj.materialid = element.MATERIALID }
-
-  obj.objects = []
-  return obj
-}
-
-function amfTriangle (element) {
-  var obj = {type: 'triangle'}
-
-  obj.objects = []
-  return obj
-}
-function amfV1 (element) {
-  return {type: 'v1', value: '0'}
-}
-function amfV2 (element) {
-  return {type: 'v2', value: '0'}
-}
-function amfV3 (element) {
-  return {type: 'v3', value: '0'}
-}
-
-function amfVertex (element) {
-  var obj = {type: 'vertex'}
-  obj.objects = []
-  return obj
-}
-
-function amfEdge (element) {
-  var obj = {type: 'edge'}
-
-  obj.objects = []
-  return obj
-}
-
-function amfMetadata (element) {
-  var obj = {type: 'metadata'}
-
-  if ('TYPE' in element) { obj.mtype = element.TYPE }
-  if ('ID' in element) { obj.id = element.ID }
-
-  return obj
-}
-
-function amfMaterial (element) {
-  var obj = {type: 'material'}
-
-  if ('ID' in element) { obj.id = element.ID }
-
-  obj.objects = []
-  return obj
-}
-
-function amfColor (element) {
-  var obj = {type: 'color'}
-
-  obj.objects = []
-  return obj
-}
-function amfR (element) {
-  return {type: 'r', value: '1'}
-}
-function amfG (element) {
-  return {type: 'g', value: '1'}
-}
-function amfB (element) {
-  return {type: 'b', value: '1'}
-}
-function amfA (element) {
-  return {type: 'a', value: '1'}
-}
-
-function amfMap (element) {
-  var obj = {type: 'map'}
-
-  if ('GTEXID' in element) { obj.gtexid = element.GTEXID }
-  if ('BTEXID' in element) { obj.btexid = element.BTEXID }
-  if ('RTEXID' in element) { obj.rtexid = element.RTEXID }
-
-  obj.objects = []
-  return obj
-}
-
-function amfU1 (element) {
-  return {type: 'u1', value: '0'}
-}
-function amfU2 (element) {
-  return {type: 'u2', value: '0'}
-}
-function amfU3 (element) {
-  return {type: 'u3', value: '0'}
 }
 
 function createAmfParser (src, pxPmm) {
   // create a parser for the XML
-  var parser = sax.parser(false, {trim: true, lowercase: false, position: true})
+  const parser = sax.parser(false, {trim: true, lowercase: false, position: true})
 
   parser.onerror = function (e) {
     console.log('error: line ' + e.line + ', column ' + e.column + ', bad character [' + e.c + ']')
   }
   parser.onopentag = function (node) {
-    // console.log('opentag: '+node.name+' at line '+this.line+' position '+this.column);
-    // for (x in node.attributes) {
-    //  console.log('    '+x+'='+node.attributes[x]);
-    // }
-    // case 'VTEX1':
-    // case 'VTEX2':
-    // case 'VTEX3':
-
-    var obj = null
-    switch (node.name) {
-      // top level elements
-      case 'AMF':
-        obj = amfAmf(node.attributes)
-        break
-      case 'OBJECT':
-        obj = this.amfObject(node.attributes)
-        if (this.amfDefinition === 0) this.amfDefinition = 1 // OBJECT processing
-        break
-      case 'MESH':
-        obj = amfMesh(node.attributes)
-        break
-      case 'VERTICES':
-        obj = amfVertices(node.attributes)
-        break
-      case 'VERTEX':
-        obj = amfVertex(node.attributes)
-        break
-      case 'EDGE':
-        obj = amfEdge(node.attributes)
-        break
-      case 'VOLUME':
-        obj = amfVolume(node.attributes)
-        break
-      case 'MATERIAL':
-        obj = amfMaterial(node.attributes)
-        if (this.amfDefinition === 0) this.amfDefinition = 2 // MATERIAL processing
-        break
-      case 'COMPOSITE':
-        break
-      case 'TEXTURE':
-        if (this.amfDefinition === 0) this.amfDefinition = 3 // TEXTURE processing
-        break
-      case 'CONSTELLATION':
-        if (this.amfDefinition === 0) this.amfDefinition = 4 // CONSTELLATION processing
-        break
-      case 'METADATA':
-        obj = amfMetadata(node.attributes)
-        if (this.amfDefinition === 0) this.amfDefinition = 5 // METADATA processing
-        break
-      // coordinate elements
-      case 'COORDINATES':
-        obj = amfCoordinates(node.attributes)
-        break
-      case 'NORMAL':
-        obj = amfNormal(node.attributes)
-        break
-      case 'X':
-      case 'NX':
-        obj = amfX(node.attributes)
-        break
-      case 'Y':
-      case 'NY':
-        obj = amfY(node.attributes)
-        break
-      case 'Z':
-      case 'NZ':
-        obj = amfZ(node.attributes)
-        break
-      // triangle elements
-      case 'TRIANGLE':
-        obj = amfTriangle(node.attributes)
-        break
-      case 'V1':
-      case 'VTEX1':
-        obj = amfV1(node.attributes)
-        break
-      case 'V2':
-      case 'VTEX2':
-        obj = amfV2(node.attributes)
-        break
-      case 'V3':
-      case 'VTEX3':
-        obj = amfV3(node.attributes)
-        break
-      // color elements
-      case 'COLOR':
-        obj = amfColor(node.attributes)
-        break
-      case 'R':
-        obj = amfR(node.attributes)
-        break
-      case 'G':
-        obj = amfG(node.attributes)
-        break
-      case 'B':
-        obj = amfB(node.attributes)
-        break
-      case 'A':
-        obj = amfA(node.attributes)
-        break
-      // map elements
-      case 'MAP':
-      case 'TEXMAP':
-        obj = amfMap(node.attributes)
-        break
-      case 'U1':
-      case 'UTEX1':
-      case 'WTEX1':
-        obj = amfU1(node.attributes)
-        break
-      case 'U2':
-      case 'UTEX2':
-      case 'WTEX2':
-        obj = amfU2(node.attributes)
-        break
-      case 'U3':
-      case 'UTEX3':
-      case 'WTEX3':
-        obj = amfU3(node.attributes)
-        break
-      default:
-        // console.log('opentag: '+node.name+' at line '+this.line+' position '+this.column);
-        break
+    const objMap = {
+      AMF: amfAmf, // obj = amfAmf(node.attributes)
+      OBJECT: (attributes) => {
+        const tmp = amfObject(attributes)
+        if (amfDefinition === 0) amfDefinition = 1 // OBJECT processing
+        return tmp
+      }, //
+      MESH: amfMesh,
+      VERTICES: amfVertices,
+      VERTEX: amfVertex,
+      EDGE: amfEdge,
+      VOLUME: amfVolume,
+      MATERIAL: attributes => {
+        const tmp = amfMaterial(attributes)
+        if (amfDefinition === 0) amfDefinition = 2 // MATERIAL processing
+        return tmp
+      },
+      TEXTURE: node => {
+        if (amfDefinition === 0) amfDefinition = 3 // TEXTURE processing
+      },
+      CONSTELLATION: node => {
+        if (amfDefinition === 0) amfDefinition = 4 // CONSTELLATION processing
+      },
+      METADATA: attributes => {
+        const tmp = amfMetadata(attributes)
+        if (amfDefinition === 0) amfDefinition = 5 // METADATA processing
+        return tmp
+      },
+      COORDINATES: amfCoordinates,
+      NORMAL: amfNormal,
+      NX: amfX,
+      X: amfX,
+      NY: amfY,
+      Y: amfY,
+      NZ: amfZ,
+      Z: amfZ,
+      TRIANGLE: amfTriangle,
+      V1: amfV1,
+      VTEX1: amfV1,
+      V2: amfV2,
+      VTEX2: amfV2,
+      V3: amfV3,
+      VTEX3: amfV3,
+      COLOR: amfColor,
+      R: amfR,
+      G: amfG,
+      B: amfB,
+      A: amfA,
+      MAP: amfMap,
+      TEXMAP: amfMap,
+      U1: amfU1,
+      UTEX1: amfU1,
+      WTEX1: amfU1,
+      U2: amfU2,
+      UTEX2: amfU2,
+      WTEX2: amfU2,
+      U3: amfU3,
+      UTEX3: amfU3,
+      WTEX3: amfU3,
+      COMPOSITE: () => undefined, // ignored by design
+      undefined: () => console.log('Warning: Unsupported AMF element: ' + node.name)
     }
 
+    let obj = objMap[node.name] ? objMap[node.name](node.attributes, {amfObjects}) : null
+
     if (obj !== null) {
-      // console.log('definitinon '+this.amfDefinition);
-      switch (this.amfDefinition) {
+      switch (amfDefinition) {
         case 0: // definition of AMF
           if ('objects' in obj) {
             // console.log('push object ['+obj.type+']');
-            this.amfObjects.push(obj)
+            amfObjects.push(obj)
           }
           break
         case 1: // definition of OBJECT
-          if (this.amfObjects.length > 0) {
-            var group = this.amfObjects.pop()
+          if (amfObjects.length > 0) {
+            let group = amfObjects.pop()
             // add the object to the active group if necessary
             if ('objects' in group) {
               // console.log('object '+group.type+' adding ['+obj.type+']');
               // console.log(JSON.stringify(obj));
               group.objects.push(obj)
             }
-            this.amfObjects.push(group)
+            amfObjects.push(group)
             // and push this object as a group object if necessary
             if ('objects' in obj) {
               // console.log('object group ['+obj.type+']');
-              this.amfObjects.push(obj)
+              amfObjects.push(obj)
             }
           }
           break
         case 2: // definition of MATERIAL
           if (obj.type === 'material') {
             // console.log('push material ['+obj.type+']');
-            this.amfMaterials.push(obj)
+            amfMaterials.push(obj)
           } else {
-            if (this.amfMaterials.length > 0) {
-              let group = this.amfMaterials.pop()
+            if (amfMaterials.length > 0) {
+              let group = amfMaterials.pop()
               // add the object to the active group if necessary
               if ('objects' in group) {
                 // console.log('material '+group.type+' adding ['+obj.type+']');
                 // console.log(JSON.stringify(obj));
                 group.objects.push(obj)
               }
-              this.amfMaterials.push(group)
+              amfMaterials.push(group)
               // and push this object as a group object if necessary
               if ('objects' in obj) {
                 // console.log('push material ['+obj.type+']');
-                this.amfMaterials.push(obj)
+                amfMaterials.push(obj)
               }
             }
           }
@@ -963,12 +1194,11 @@ function createAmfParser (src, pxPmm) {
           console.log('ERROR: invalid AMF definition')
           break
       }
-      this.amfLast = obj // retain this object in order to add values
+      amfLast = obj // retain this object in order to add values
     }
   }
 
   parser.onclosetag = function (node) {
-    // console.log('onclosetag: '+this.amfDefinition);
     switch (node) {
       // list those which have objects
       case 'AMF':
@@ -987,53 +1217,53 @@ function createAmfParser (src, pxPmm) {
       case 'TEXMAP':
         break
       case 'TEXTURE':
-        if (this.amfDefinition === 3) { this.amfDefinition = 0 } // resume processing
+        if (amfDefinition === 3) { amfDefinition = 0 } // resume processing
         return
       case 'CONSTELLATION':
-        if (this.amfDefinition === 4) { this.amfDefinition = 0 } // resume processing
+        if (amfDefinition === 4) { amfDefinition = 0 } // resume processing
         return
       case 'METADATA':
-        if (this.amfDefinition === 5) { this.amfDefinition = 0 } // resume processing
+        if (amfDefinition === 5) { amfDefinition = 0 } // resume processing
         return
       default:
         // console.log('closetag: '+node);
         return
     }
 
-    var obj = null
-    switch (this.amfDefinition) {
+    let obj = null
+    switch (amfDefinition) {
       case 0: // definition of AMF
       case 1: // definition of OBJECT
-        if (this.amfObjects.length > 0) {
-          obj = this.amfObjects.pop()
+        if (amfObjects.length > 0) {
+          obj = amfObjects.pop()
           // console.log('pop object ['+obj.type+']');
           if (obj.type === 'object') {
-            this.amfDefinition = 0 // AMF processing
+            amfDefinition = 0 // AMF processing
           }
         }
         // check for completeness
-        if (this.amfObjects.length === 0) {
-          this.amfObj = obj
+        if (amfObjects.length === 0) {
+          amfObj = obj
         }
         break
       case 2: // definition of MATERIAL
-        if (this.amfMaterials.length > 0) {
-          obj = this.amfMaterials.pop()
+        if (amfMaterials.length > 0) {
+          obj = amfMaterials.pop()
           // console.log('pop material ['+obj.type+']');
           if (obj.type === 'material') {
-            this.amfMaterials.push(obj) // keep a list of materials
-            this.amfDefinition = 0 // AMF processing
+            amfMaterials.push(obj) // keep a list of materials
+            amfDefinition = 0 // AMF processing
           }
         }
         break
       case 3: // definition of TEXTURE
-        this.amfDefinition = 0 // AMF processing
+        amfDefinition = 0 // AMF processing
         break
       case 4: // definition of CONSTELLATION
-        this.amfDefinition = 0 // AMF processing
+        amfDefinition = 0 // AMF processing
         break
       case 5: // definition of METADATA
-        this.amfDefinition = 0 // AMF processing
+        amfDefinition = 0 // AMF processing
         break
       default:
         break
@@ -1042,21 +1272,59 @@ function createAmfParser (src, pxPmm) {
 
   parser.ontext = function (value) {
     if (value !== null) {
-      if (this.amfLast && this.amfDefinition !== 0) {
-        this.amfLast.value = value
-        // console.log(JSON.stringify(this.amfLast));
+      if (amfLast && amfDefinition !== 0) {
+        amfLast.value = value
       }
     }
   }
 
   parser.onend = function () {
-    // console.log('AMF parsing completed');
+    // console.log('AMF parsing completed')
   }
 
   // start the parser
   parser.write(src).close()
+}
 
-  return parser
+const parse = (src, pxPmm) => {
+  createAmfParser(src, pxPmm)
+  return {amfObj, amfMaterials, amfTextures, amfConstels}
+}
+
+module.exports = parse
+
+},{"./constants":9,"./helpers":11,"sax":113}],15:[function(require,module,exports){
+const createObject = require('./objectBuilder')
+const parse = require('./parse')
+
+const translate = function (src, filename, options) {
+  options && options.statusCallback && options.statusCallback({progress: 0})
+  filename = filename || 'amf'
+  const defaults = {pxPmm: require('./constants').pxPmm, version: '0.0.0', addMetaData: true}
+  options = Object.assign({}, defaults, options)
+  const {version, pxPmm, addMetaData} = options
+
+  // parse the AMF source
+  const {amfObj, amfMaterials, amfTextures, amfConstels} = parse(src, pxPmm)
+  // convert the internal objects to JSCAD code
+  let code = addMetaData ? `//
+  // producer: OpenJSCAD.org ${version} AMF deserializer
+  // date: ${new Date()}
+  // source: ${filename}
+  //
+  ` : ''
+
+  if (!amfObj) {
+    throw new Error('AMF parsing failed, no valid AMF data retrieved')
+  }
+
+  options && options.statusCallback && options.statusCallback({progress: 50})
+  
+  const scadCode = codify(amfObj, {amfMaterials, amfTextures, amfConstels})
+  code += scadCode
+  
+  options && options.statusCallback && options.statusCallback({progress: 100})
+  return code
 }
 
 //
@@ -1064,60 +1332,18 @@ function createAmfParser (src, pxPmm) {
 //
 function codify (amf, data) {
   if (amf.type !== 'amf' || (!amf.objects)) throw new Error('AMF malformed')
-
   let code = ''
 
   // hack due to lack of this in array map()
-  var objects = amf.objects
-  var materials = data.amfMaterials
-  var lastmaterial = null
-  function findMaterial (id) {
-    if (lastmaterial && lastmaterial.id === id) return lastmaterial
-    for (let i = 0; i < materials.length; i++) {
-      if (materials[i].id && materials[i].id === id) {
-        lastmaterial = materials[i]
-        return lastmaterial
-      }
-    }
-    return null
-  }
-  function getValue (objects, type) {
-    for (let i = 0; i < objects.length; i++) {
-      if (objects[i].type === type) return objects[i].value
-    }
-    return null
-  }
-  function getColor (objects) {
-    for (let i = 0; i < objects.length; i++) {
-      var obj = objects[i]
-      if (obj.type === 'color') {
-        var r = parseFloat(getValue(obj.objects, 'r'))
-        var g = parseFloat(getValue(obj.objects, 'g'))
-        var b = parseFloat(getValue(obj.objects, 'b'))
-        var a = parseFloat(getValue(obj.objects, 'a'))
-        if (Number.isNaN(r)) r = 1.0 // AMF default color
-        if (Number.isNaN(g)) g = 1.0
-        if (Number.isNaN(b)) b = 1.0
-        if (Number.isNaN(a)) a = 1.0
-        return [r, g, b, a]
-      }
-    }
-    return null
-  }
-  function findColorByMaterial (id) {
-    var m = findMaterial(id)
-    if (m) {
-      return getColor(m.objects)
-    }
-    return null
-  }
+  let objects = amf.objects
+  let materials = data.amfMaterials
 
   // convert high level definitions
   function createDefinition (obj, didx) {
     // console.log(materials.length);
     switch (obj.type) {
       case 'object':
-        createObject(obj, didx)
+        code += createObject(obj, didx, data, {csg: false})
         break
       case 'metadata':
         break
@@ -1128,176 +1354,48 @@ function codify (amf, data) {
         break
     }
   }
-  // convert all objects to CSG based code
-  function createObject (obj, oidx) {
-    var vertices = [] // [x,y,z]
-    var faces = [] // [v1,v2,v3]
-    var colors = [] // [r,g,b,a]
-
-    function addCoord (coord, cidx) {
-      if (coord.type === 'coordinates') {
-        var x = parseFloat(getValue(coord.objects, 'x'))
-        var y = parseFloat(getValue(coord.objects, 'y'))
-        var z = parseFloat(getValue(coord.objects, 'z'))
-        // console.log('['+x+','+y+','+z+']');
-        vertices.push([x, y, z])
-      }
-      // normal is possible
-    }
-    function addVertex (vertex, vidx) {
-      // console.log(vertex.type);
-      if (vertex.type === 'vertex') {
-        vertex.objects.map(addCoord)
-      }
-      // edge is possible
-    }
-    function addTriangle (tri, tidx) {
-      if (tri.type === 'triangle') {
-        var v1 = parseInt(getValue(tri.objects, 'v1'))
-        var v2 = parseInt(getValue(tri.objects, 'v2'))
-        var v3 = parseInt(getValue(tri.objects, 'v3'))
-        // console.log('['+v1+','+v2+','+v3+']');
-        faces.push([v1, v2, v3]) // HINT: reverse order for polyhedron()
-        var c = getColor(tri.objects)
-        if (c) {
-          colors.push(c)
-        } else {
-          colors.push(tricolor)
-        }
-      }
-    }
-    var tricolor = null // for found colors
-    function addPart (part, pidx) {
-      // console.log(part.type);
-      switch (part.type) {
-        case 'vertices':
-          part.objects.map(addVertex, data)
-          break
-        case 'volume':
-          tricolor = getColor(part.objects)
-          if (part.materialid) {
-          // convert material to color
-            tricolor = findColorByMaterial(part.materialid)
-          }
-          part.objects.map(addTriangle, data)
-          break
-        default:
-          break
-      }
-    }
-    function addMesh (mesh, midx) {
-      // console.log(mesh.type);
-      if (mesh.type === 'mesh') {
-        mesh.objects.map(addPart, data)
-      }
-    }
-
-    if (obj.objects.length > 0) {
-      obj.objects.map(addMesh, data)
-
-      var fcount = faces.length
-      var vcount = vertices.length
-
-      code += '// Object ' + obj.id + '\n'
-      code += '//  faces   : ' + fcount + '\n'
-      code += '//  vertices: ' + vcount + '\n'
-      code += 'function createObject' + obj.id + '() {\n'
-      code += '  var polys = [];\n'
-
-      // convert the results into function calls
-      for (var i = 0; i < fcount; i++) {
-        code += '  polys.push(\n'
-        code += '    PP([\n'
-        for (var j = 0; j < faces[i].length; j++) {
-          if (faces[i][j] < 0 || faces[i][j] >= vcount) {
-            // if (err.length === '') err += 'bad index for vertice (out of range)'
-            continue
-          }
-          if (j) code += ',\n'
-          code += '      VV(' + vertices[faces[i][j]] + ')'
-        }
-        code += '])'
-        if (colors[i]) {
-          var c = colors[i]
-          code += '.setColor([' + c[0] + ',' + c[1] + ',' + c[2] + ',' + c[3] + '])'
-        }
-        code += ');\n'
-      }
-      code += '  return CSG.fromPolygons(polys);\n'
-      code += '}\n'
-    }
-  }
 
   // start everthing
-  code = '// Objects  : ' + objects.length + '\n'
-  code += '// Materials: ' + materials.length + '\n'
-  code += '\n'
-  code += '// helper functions\n'
+  code = `// Objects  : ${objects.length}
+// Materials: ${materials.length}
+
+// helper functions
+`
+
   if (amf.scale !== 1.0) {
-    code += 'var SCALE = ' + amf.scale + '; // scaling units (' + amf.unit + ')\n'
-    code += 'var VV = function(x,y,z) { return new CSG.Vertex(new CSG.Vector3D(x*SCALE,y*SCALE,z*SCALE)); };\n'
+    code += 'let SCALE = ' + amf.scale + '; // scaling units (' + amf.unit + ')\n'
+    code += 'let VV = function(x,y,z) { return new CSG.Vertex(new CSG.Vector3D(x*SCALE,y*SCALE,z*SCALE)); };\n'
   } else {
-    code += 'var VV = function(x,y,z) { return new CSG.Vertex(new CSG.Vector3D(x,y,z)); };\n'
+    code += 'let VV = function(x,y,z) { return new CSG.Vertex(new CSG.Vector3D(x,y,z)); };\n'
   }
-  code += 'var PP = function(a) { return new CSG.Polygon(a); };\n'
-  code += '\n'
-  code += 'function main() {\n'
-  code += '  var csgs = [];\n'
+  code += `let PP = function(a) { return new CSG.Polygon(a); };
+
+function main() {
+  let csgs = [];
+`
   for (let i = 0; i < objects.length; i++) {
-    var obj = objects[i]
+    let obj = objects[i]
     if (obj.type === 'object') {
       code += '  csgs.push(createObject' + obj.id + '());\n'
     }
   }
-  code += '  return union(csgs);\n'
-  code += '}\n'
-  code += '\n'
+  code += `  return union(csgs);
+}
+
+`
 
   objects.map(createDefinition, data)
   return code
 }
 
-//
-// deserialize the given AMF source and return a JSCAD script
-//
-// fn (optional) original filename of AMF source
-// options (optional) anonymous object with:
-// pxPmm: pixels per milimeter for calcuations
-// FIXME: add openjscad version in a cleaner manner ?
-function deserialize (src, fn, options) {
-  fn = fn || 'amf'
-  const defaults = {version: '0.0.0'}
-  options = Object.assign({}, defaults, options)
-  const {version} = options
+module.exports = translate
 
-  // parse the AMF source
-  const parser = createAmfParser(src)
-  // convert the internal objects to JSCAD code
-  var code = ''
-  code += '//\n'
-  code += '// producer: OpenJSCAD.org ' + version + ' AMF Importer\n'
-  code += '// date: ' + (new Date()) + '\n'
-  code += '// source: ' + fn + '\n'
-  code += '//\n'
-  if (parser.amfObj !== null) {
-    // console.log(JSON.stringify(parser.amfObj))
-    // console.log(JSON.stringify(parser.amfMaterials))
-    code += codify(parser.amfObj, parser)
-  } else {
-    console.log('Warning: AMF parsing failed')
-  }
-  return code
-}
-
-module.exports = {
-  deserialize
-}
-
-},{"sax":97}],10:[function(require,module,exports){
+},{"./constants":9,"./objectBuilder":13,"./parse":14}],16:[function(require,module,exports){
 const { ensureManifoldness } = require('@jscad/io-utils')
 const mimeType = 'application/amf+xml'
 
-function serialize (CSG, m) {
+function serialize (CSG, m, options) {
+  options && options.statusCallback && options.statusCallback({progress: 0})
   CSG = ensureManifoldness(CSG)
   var result = '<?xml version="1.0" encoding="UTF-8"?>\n<amf' + (m && m.unit ? ' unit="+m.unit"' : '') + '>\n'
   for (var k in m) {
@@ -1313,7 +1411,7 @@ function serialize (CSG, m) {
   result += '</vertices>\n'
 
   var n = 0
-  CSG.polygons.map(function (p) { // then we dump all polygons
+  CSG.polygons.map(function (p, i) { // then we dump all polygons
     result += '<volume>\n'
     if (p.vertices.length < 3) {
       return
@@ -1338,9 +1436,13 @@ function serialize (CSG, m) {
     }
     n += p.vertices.length
     result += '</volume>\n'
+    options && options.statusCallback && options.statusCallback({progress: 100 * i / CSG.polygons.length})
   })
   result += '</mesh>\n</object>\n'
   result += '</amf>\n'
+
+  options && options.statusCallback && options.statusCallback({progress: 100})
+
   return [result]
 }
 
@@ -1365,13 +1467,13 @@ module.exports = {
   mimeType
 }
 
-},{"@jscad/io-utils":73}],11:[function(require,module,exports){
+},{"@jscad/io-utils":88}],17:[function(require,module,exports){
 const api = require('./src/api/index')
 // const csg = require('./csg')
 
 module.exports = api // {api, csg}
 
-},{"./src/api/index":18}],12:[function(require,module,exports){
+},{"./src/api/index":25}],18:[function(require,module,exports){
 /*
 ## License
 
@@ -1566,9 +1668,6 @@ addTransformationMethodsToPrototype(CAG.prototype)
 addTransformationMethodsToPrototype(CAG.Side.prototype)
 addTransformationMethodsToPrototype(CAG.Vertex.prototype)
 
-addCenteringToPrototype(CSG.prototype, ['x', 'y', 'z'])
-addCenteringToPrototype(CAG.prototype, ['x', 'y'])
-
 CSG.parseOptionAs2DVector = optionsParsers.parseOptionAs3DVector
 CSG.parseOptionAs3DVector = optionsParsers.parseOptionAs3DVector
 CSG.parseOptionAs3DVectorList = optionsParsers.parseOptionAs3DVectorList
@@ -1585,7 +1684,7 @@ const globalApi = Object.assign({}, {CSG, CAG}, optionsParsers, {isCAG, isCSG})
 
 module.exports = globalApi
 
-},{"./src/api/debugHelpers":16,"./src/api/optionParsers":27,"./src/api/primitives2d":29,"./src/api/primitives3d":31,"./src/core/CAG":34,"./src/core/CAGFactories":35,"./src/core/CSG":36,"./src/core/CSGFactories":37,"./src/core/Properties":41,"./src/core/connectors":42,"./src/core/constants":43,"./src/core/math/Line2":44,"./src/core/math/Line3":45,"./src/core/math/Matrix4":46,"./src/core/math/OrthoNormalBasis":47,"./src/core/math/Path2":48,"./src/core/math/Plane":49,"./src/core/math/Polygon2":50,"./src/core/math/Polygon3":51,"./src/core/math/Side":52,"./src/core/math/Vector2":53,"./src/core/math/Vector3":54,"./src/core/math/Vertex2":55,"./src/core/math/Vertex3":56,"./src/core/mutators":59,"./src/core/utils":61}],13:[function(require,module,exports){
+},{"./src/api/debugHelpers":23,"./src/api/optionParsers":34,"./src/api/primitives2d":36,"./src/api/primitives3d":38,"./src/core/CAG":41,"./src/core/CAGFactories":42,"./src/core/CSG":43,"./src/core/CSGFactories":44,"./src/core/Properties":48,"./src/core/connectors":49,"./src/core/constants":50,"./src/core/math/Line2":51,"./src/core/math/Line3":52,"./src/core/math/Matrix4":53,"./src/core/math/OrthoNormalBasis":54,"./src/core/math/Path2":55,"./src/core/math/Plane":56,"./src/core/math/Polygon2":57,"./src/core/math/Polygon3":58,"./src/core/math/Side":59,"./src/core/math/Vector2":60,"./src/core/math/Vector3":61,"./src/core/math/Vertex2":62,"./src/core/math/Vertex3":63,"./src/core/mutators":66,"./src/core/utils":68}],19:[function(require,module,exports){
 const Path2D = require('../core/math/Path2')
 
 const cagoutlinePaths = function (_cag) {
@@ -1667,7 +1766,45 @@ const cagoutlinePaths = function (_cag) {
 
 module.exports = cagoutlinePaths
 
-},{"../core/math/Path2":48}],14:[function(require,module,exports){
+},{"../core/math/Path2":55}],20:[function(require,module,exports){
+const toArray = require('../core/utils/toArray')
+
+/**
+ * Centers the given object(s) using the given options (if any)
+ * @param {Object} [options] - options for centering
+ * @param {Array} [options.axes=[true,true,true]] - axis of which to center, true or false
+ * @param {Array} [options.center=[0,0,0]] - point of which to center the object upon
+ * @param {Object|Array} objects - the shape(s) to center
+ * @return {Object|Array} objects
+ *
+ * @example
+ * let csg = center({axes: [true,false,false]}, sphere()) // center about the X axis
+ */
+const center = function (options, objects) {
+  const defaults = {
+    axes: [true, true, true],
+    center: [0, 0, 0]
+  // TODO : Add addition 'methods' of centering; midpoint, centeriod
+  }
+  options = Object.assign({}, defaults, options)
+  const {axes,center} = options
+  objects = toArray(objects)
+
+  const results = objects.map(function (object) {
+    let bounds = object.getBounds()
+    let offset = [0,0,0]
+    if (axes[0]) offset[0] = center[0] - (bounds[0].x + ((bounds[1].x - bounds[0].x) / 2))
+    if (axes[1]) offset[1] = center[1] - (bounds[0].y + ((bounds[1].y - bounds[0].y) / 2))
+    if (axes[2]) offset[2] = center[2] - (bounds[0].z + ((bounds[1].y - bounds[0].y) / 2))
+    return object.translate(offset)
+  })
+  // if there is more than one result, return them all , otherwise a single one
+  return results.length === 1 ? results[0] : results
+}
+
+module.exports = center
+
+},{"../core/utils/toArray":76}],21:[function(require,module,exports){
 // color table from http://www.w3.org/TR/css3-color/
 const cssColors = {
 // basic color keywords
@@ -2114,7 +2251,7 @@ module.exports = {
   rgb2html
 }
 
-},{}],15:[function(require,module,exports){
+},{}],22:[function(require,module,exports){
 function echo () {
   console.warn('echo() will be deprecated in the near future: please use console.log/warn/error instead')
   var s = '', a = arguments
@@ -2131,7 +2268,7 @@ module.exports = {
   echo
 }
 
-},{}],16:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 const CSG = require('../core/CSG')
 const {cube} = require('./primitives3d')
 
@@ -2166,7 +2303,7 @@ const toPointCloud = function (csg, cuberadius) {
 
 module.exports = {toPointCloud}
 
-},{"../core/CSG":36,"./primitives3d":31}],17:[function(require,module,exports){
+},{"../core/CSG":43,"./primitives3d":38}],24:[function(require,module,exports){
 const Vertex3 = require('../core/math/Vertex3')
 const Vector3 = require('../core/math/Vector3')
 const Polygon3 = require('../core/math/Polygon3')
@@ -2231,7 +2368,7 @@ const degToRad = deg => (Math.PI / 180) * deg
 
 module.exports = {cagToPointsArray, clamp, rightMultiply1x3VectorToArray, polygonFromPoints}
 
-},{"../core/math/Polygon3":51,"../core/math/Vector3":54,"../core/math/Vertex3":56}],18:[function(require,module,exports){
+},{"../core/math/Polygon3":58,"../core/math/Vector3":61,"../core/math/Vertex3":63}],25:[function(require,module,exports){
 
 const primitives3d = require('./primitives3d-api')
 const primitives2d = require('./primitives2d-api')
@@ -2267,7 +2404,7 @@ const exportedApi = {
 
 module.exports = exportedApi
 
-},{"../../csg":12,"./color":14,"./debug":15,"./log":19,"./maths":20,"./ops-booleans":21,"./ops-extrusions":25,"./ops-transformations":26,"./primitives2d-api":28,"./primitives3d-api":30,"./text":33}],19:[function(require,module,exports){
+},{"../../csg":18,"./color":21,"./debug":22,"./log":26,"./maths":27,"./ops-booleans":28,"./ops-extrusions":32,"./ops-transformations":33,"./primitives2d-api":35,"./primitives3d-api":37,"./text":40}],26:[function(require,module,exports){
 function log (txt) {
   console.warn('log() will be deprecated in the near future: please use console.log/warn/error instead')
   var timeInMs = Date.now()
@@ -2295,7 +2432,7 @@ module.exports = {
   status
 }
 
-},{}],20:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 // -- Math functions (360 deg based vs 2pi)
 function sin (a) {
   return Math.sin(a / 360 * Math.PI * 2)
@@ -2406,7 +2543,7 @@ module.exports = {
   round
 }
 
-},{}],21:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 const {isCAG} = require('../core/utils')
 // boolean operations
 
@@ -2509,7 +2646,7 @@ module.exports = {
   intersection
 }
 
-},{"../core/utils":61}],22:[function(require,module,exports){
+},{"../core/utils":68}],29:[function(require,module,exports){
 const Matrix4x4 = require('../core/math/Matrix4.js')
 const Vector3D = require('../core/math/Vector3.js')
 const {Connector} = require('../core/connectors.js')
@@ -2678,7 +2815,7 @@ const overCutInsideCorners = function (_cag, cutterradius) {
 
 module.exports = {lieFlat, getTransformationToFlatLying, getTransformationAndInverseTransformationToFlatLying, overCutInsideCorners}
 
-},{"../core/CAGFactories":35,"../core/connectors.js":42,"../core/math/Matrix4.js":46,"../core/math/Vector2":53,"../core/math/Vector3.js":54}],23:[function(require,module,exports){
+},{"../core/CAGFactories":42,"../core/connectors.js":49,"../core/math/Matrix4.js":53,"../core/math/Vector2":60,"../core/math/Vector3.js":61}],30:[function(require,module,exports){
 const {EPS} = require('../core/constants')
 const Plane = require('../core/math/Plane')
 const Vector2 = require('../core/math/Vector2')
@@ -2744,7 +2881,7 @@ const cutByPlane = function (csg, plane) {
 
 module.exports = {sectionCut, cutByPlane}
 
-},{"../core/CSG":36,"../core/constants":43,"../core/math/OrthoNormalBasis":47,"../core/math/Plane":49,"../core/math/Polygon3":51,"../core/math/Vector2":53,"../core/math/Vertex3":56}],24:[function(require,module,exports){
+},{"../core/CSG":43,"../core/constants":50,"../core/math/OrthoNormalBasis":54,"../core/math/Plane":56,"../core/math/Polygon3":58,"../core/math/Vector2":60,"../core/math/Vertex3":63}],31:[function(require,module,exports){
 
 const {EPS, angleEPS} = require('../core/constants')
 const Vertex = require('../core/math/Vertex3')
@@ -3083,7 +3220,7 @@ module.exports = {
   expandedShellOfCCSG
 }
 
-},{"../core/CAG":34,"../core/CAGFactories":35,"../core/CSG":36,"../core/CSGFactories":37,"../core/constants":43,"../core/math/Polygon3":51,"../core/math/Vector2":53,"../core/math/Vertex3":56,"../core/utils":61}],25:[function(require,module,exports){
+},{"../core/CAG":41,"../core/CAGFactories":42,"../core/CSG":43,"../core/CSGFactories":44,"../core/constants":50,"../core/math/Polygon3":58,"../core/math/Vector2":60,"../core/math/Vertex3":63,"../core/utils":68}],32:[function(require,module,exports){
 const {EPS, defaultResolution3D} = require('../core/constants')
 const OrthoNormalBasis = require('../core/math/OrthoNormalBasis')
 const {parseOptionAs3DVector, parseOptionAsBool, parseOptionAsFloat, parseOptionAsInt} = require('./optionParsers')
@@ -3442,7 +3579,7 @@ module.exports = {
   rectangular_extrude
 }
 
-},{"../core/CAGFactories":35,"../core/CSG":36,"../core/CSGFactories":37,"../core/connectors":42,"../core/constants":43,"../core/math/Matrix4":46,"../core/math/OrthoNormalBasis":47,"../core/math/Path2":48,"../core/math/Vector3":54,"./helpers":17,"./optionParsers":27}],26:[function(require,module,exports){
+},{"../core/CAGFactories":42,"../core/CSG":43,"../core/CSGFactories":44,"../core/connectors":49,"../core/constants":50,"../core/math/Matrix4":53,"../core/math/OrthoNormalBasis":54,"../core/math/Path2":55,"../core/math/Vector3":61,"./helpers":24,"./optionParsers":34}],33:[function(require,module,exports){
 const Matrix4 = require('../core/math/Matrix4')
 const Plane = require('../core/math/Plane')
 const Vector3 = require('../core/math/Vector3')
@@ -3563,15 +3700,17 @@ function transform (matrix, ...objects) { // v, obj or array
   return object.transform(transformationMatrix)
 }
 
-/** center an object in 2D/3D space
- * @param {Boolean|Array} axis - either an array or single boolean to indicate which axis you want to center on
- * @param {Object(s)|Array} objects either a single or multiple CSG/CAG objects to translate
+
+/**
+ * Center the given object(s) about the given axes
+ * @param {Array|Boolean} axes=[true,true,true]|true  - an array of boolean values that indicate the axes (X,Y,Z) to center upon. A single boolean is also allowed.
+ * @param {...Object} object one or more objects to center, i.e. objects are CSG or CAG
  * @returns {CSG} new CSG object , translated by the given amount
  *
  * @example
- * let movedSphere = center(false, sphere())
+ * let csg = center([true,false,false], sphere()) // center about the X axis
  */
-function center (axis, ...objects) { // v, obj or array
+function center (axes, ...objects) {
   const _objects = (objects.length >= 1 && objects[0].length) ? objects[0] : objects
   let object = _objects[0]
 
@@ -3580,7 +3719,10 @@ function center (axis, ...objects) { // v, obj or array
       object = object.union(_objects[i])
     }
   }
-  return object.center(axis)
+  if (! Array.isArray(axes)) {
+    axes = [axes,axes,axes]
+  }
+  return object.center(axes)
 }
 
 /** mirror an object in 2D/3D space
@@ -3859,7 +4001,7 @@ module.exports = {
   chain_hull
 }
 
-},{"../core/CAGFactories":35,"../core/math/Matrix4":46,"../core/math/Plane":49,"../core/math/Vector3":54,"../core/utils":61,"./ops-booleans":21}],27:[function(require,module,exports){
+},{"../core/CAGFactories":42,"../core/math/Matrix4":53,"../core/math/Plane":56,"../core/math/Vector3":61,"../core/utils":68,"./ops-booleans":28}],34:[function(require,module,exports){
 const Vector3D = require('../core/math/Vector3')
 const Vector2D = require('../core/math/Vector2')
 
@@ -3937,7 +4079,7 @@ module.exports = {
   parseOptionAs3DVectorList
 }
 
-},{"../core/math/Vector2":53,"../core/math/Vector3":54}],28:[function(require,module,exports){
+},{"../core/math/Vector2":60,"../core/math/Vector3":61}],35:[function(require,module,exports){
 const {CAG} = require('../../csg')// we have to import from top level otherwise prototypes are not complete..
 const {fromPoints} = require('../core/CAGFactories')
 
@@ -3995,32 +4137,43 @@ function circle (params) {
   return CAG.circle({center: offset, radius: r, resolution: fn})
 }
 
-/** Construct a polygon either from arrays of paths and points, or just arrays of points
- * nested paths (multiple paths) and flat paths are supported
- * @param {Object} [options] - options for construction
- * @param {Array} [options.paths] - paths of the polygon : either flat or nested array
- * @param {Array} [options.points] - points of the polygon : either flat or nested array
+/** Construct a polygon either from arrays of paths and points,
+ * or just arrays of points nested paths (multiple paths) and flat paths are supported
+ * @param {Object} [options] - options for construction or either flat or nested array of points
+ * @param {Array} [options.points] - points of the polygon : either flat or nested array of points
+ * @param {Array} [options.paths] - paths of the polygon : either flat or nested array of points index
  * @returns {CAG} new polygon
  *
  * @example
- * let poly = polygon([0,1,2,3,4])
+ * let roof = [[10,11], [0,11], [5,20]]
+ * let wall = [[0,0], [10,0], [10,10], [0,10]]
+ *
+ * let poly = polygon(roof)
  * or
- * let poly = polygon({path: [0,1,2,3,4]})
+ * let poly = polygon([roof, wall])
  * or
- * let poly = polygon({path: [0,1,2,3,4], points: [2,1,3]})
+ * let poly = polygon({ points: roof })
+ * or
+ * let poly = polygon({ points: [roof, wall] })
+ * or
+ * let poly = polygon({ points: roof, path: [0, 1, 2] })
+ * or
+ * let poly = polygon({ points: [roof, wall], path: [[0, 1, 2], [3, 4, 5, 6]] })
+ * or
+ * let poly = polygon({ points: roof.concat(wall), paths: [[0, 1, 2], [3, 4, 5], [3, 6, 5]] })
  */
 function polygon (params) { // array of po(ints) and pa(ths)
-  let points = [ ]
+  let points = []
   if (params.paths && params.paths.length && params.paths[0].length) { // pa(th): [[0,1,2],[2,3,1]] (two paths)
-    for (let j = 0; j < params.paths.length; j++) {
-      for (let i = 0; i < params.paths[j].length; i++) {
-        points[i] = params.points[params.paths[j][i]]
-      }
+    if (typeof params.points[0][0] !== 'number') { // flatten points array
+      params.points = params.points.reduce((a, b) => a.concat(b))
     }
+    params.paths.forEach((path, i) => {
+      points.push([])
+      path.forEach(j => points[i].push(params.points[j]))
+    })
   } else if (params.paths && params.paths.length) { // pa(th): [0,1,2,3,4] (single path)
-    for (let i = 0; i < params.paths.length; i++) {
-      points[i] = params.points[params.paths[i]]
-    }
+    params.paths.forEach(i => points.push(params.points[i]))
   } else { // pa(th) = po(ints)
     if (params.length) {
       points = params
@@ -4053,7 +4206,7 @@ module.exports = {
   triangle
 }
 
-},{"../../csg":12,"../core/CAGFactories":35}],29:[function(require,module,exports){
+},{"../../csg":18,"../core/CAGFactories":42}],36:[function(require,module,exports){
 const CAG = require('../core/CAG')
 const {parseOptionAs2DVector, parseOptionAsFloat, parseOptionAsInt} = require('./optionParsers')
 const {defaultResolution2D} = require('../core/constants')
@@ -4240,7 +4393,7 @@ module.exports = {
   fromCompactBinary
 }
 
-},{"../core/CAG":34,"../core/CAGFactories":35,"../core/constants":43,"../core/math/Path2":48,"../core/math/Vector2":53,"../core/math/Vertex2":55,"./optionParsers":27}],30:[function(require,module,exports){
+},{"../core/CAG":41,"../core/CAGFactories":42,"../core/constants":50,"../core/math/Path2":55,"../core/math/Vector2":60,"../core/math/Vertex2":62,"./optionParsers":34}],37:[function(require,module,exports){
 
 /// //////////FUNCTIONAL API
 const {CSG} = require('../../csg')
@@ -4637,7 +4790,7 @@ module.exports = {
   polyhedron
 }
 
-},{"../../csg":12,"../core/CSGFactories":37,"../core/math/Polygon3":51,"../core/math/Vector3":54,"../core/math/Vertex3":56,"./ops-extrusions":25,"./ops-transformations":26,"./primitives2d-api":28}],31:[function(require,module,exports){
+},{"../../csg":18,"../core/CSGFactories":44,"../core/math/Polygon3":58,"../core/math/Vector3":61,"../core/math/Vertex3":63,"./ops-extrusions":32,"./ops-transformations":33,"./primitives2d-api":35}],38:[function(require,module,exports){
 const {parseOption, parseOptionAs3DVector, parseOptionAs2DVector, parseOptionAs3DVectorList, parseOptionAsFloat, parseOptionAsInt} = require('./optionParsers')
 const {defaultResolution3D, defaultResolution2D, EPS} = require('../core/constants')
 const Vector3 = require('../core/math/Vector3')
@@ -5187,7 +5340,7 @@ module.exports = {
   polyhedron
 }
 
-},{"../core/CSGFactories":37,"../core/Properties":41,"../core/connectors":42,"../core/constants":43,"../core/math/Polygon3":51,"../core/math/Vector3":54,"../core/math/Vertex3":56,"./optionParsers":27}],32:[function(require,module,exports){
+},{"../core/CSGFactories":44,"../core/Properties":48,"../core/connectors":49,"../core/constants":50,"../core/math/Polygon3":58,"../core/math/Vector3":61,"../core/math/Vertex3":63,"./optionParsers":34}],39:[function(require,module,exports){
 const Polygon = require('../core/math/Polygon3')
 const {fromPolygons} = require('../core/CSGFactories')
 const {fnSortByIndex} = require('../core/utils')
@@ -5402,646 +5555,218 @@ const _addWalls = function (walls, bottom, top, bFlipped) {
 
 module.exports = solidFromSlices
 
-},{"../core/CSGFactories":37,"../core/math/Polygon3":51,"../core/utils":61}],33:[function(require,module,exports){
+},{"../core/CSGFactories":44,"../core/math/Polygon3":58,"../core/utils":68}],40:[function(require,module,exports){
+const defaultFont = require('../fonts/single-line/hershey/simplex.js')
+const { union } = require('./ops-booleans')
 
-/** Construct a with, segments tupple from a character
- * @param {Float} x - x offset
- * @param {Float} y - y offset
- * @param {Float} char - character
- * @returns {Object} { width: X, segments: [...] }
- *
- * @example
- * let charData = vector_char(0, 12.2, 'b')
- */
-function vector_char (x, y, char) {
-  char = char.charCodeAt(0)
-  char -= 32
-  if (char < 0 || char >= 95) return { width: 0, segments: [] }
-
-  let off = char * 112
-  let n = simplexFont[off++]
-  let w = simplexFont[off++]
-  let l = []
-  let segs = []
-
-  for (let i = 0; i < n; i++) {
-    let xp = simplexFont[off + i * 2]
-    let yp = simplexFont[off + i * 2 + 1]
-    if (xp === -1 && yp === -1) {
-      segs.push(l); l = []
-    } else {
-      l.push([xp + x, yp + y])
-    }
-  }
-  if (l.length) segs.push(l)
-  return { width: w, segments: segs }
+const defaultsVectorParams = {
+  xOffset: 0,
+  yOffset: 0,
+  input: '?',
+  align: 'left',
+  font: defaultFont,
+  height: 14, // == old vector_xxx simplex font height
+  lineSpacing: 2.142857142857143, // == 30/14 == old vector_xxx ratio
+  letterSpacing: 1,
+  extrudeOffset: 0
 }
 
-/** Construct an array of with, segments tupple from a string
- * @param {Float} x - x offset
- * @param {Float} y - y offset
- * @param {Float} string - string
- * @returns {Array} [{ width: X, segments: [...] }]
- *
- * @example
- * let stringData = vector_text(0, 12.2, 'b')
- */
-function vector_text (x, y, string) {
-  let output = []
-  let x0 = x
-  for (let i = 0; i < string.length; i++) {
-    let char = string.charAt(i)
-    if (char === '\n') {
-      x = x0; y -= 30
-    } else {
-      let d = vector_char(x, y, char)
-      x += d.width
-      output = output.concat(d.segments)
+// vectorsXXX parameters handler
+function vectorParams (options, input) {
+  if (!input && typeof options === 'string') {
+    options = { input: options }
+  }
+  options = options || {}
+  let params = Object.assign({}, defaultsVectorParams, options)
+  params.input = input || params.input
+  return params
+}
+
+// translate text line
+function translateLine (options, line) {
+  const { x, y } = Object.assign({ x: 0, y: 0 }, options || {})
+  let segments = line.segments
+  let segment = null
+  let point = null
+  for (let i = 0, il = segments.length; i < il; i++) {
+    segment = segments[i]
+    for (let j = 0, jl = segment.length; j < jl; j++) {
+      point = segment[j]
+      segment[j] = [point[0] + x, point[1] + y]
     }
+  }
+  return line
+}
+
+/** Represents a character as segments
+* @typedef {Object} VectorCharObject
+* @property {Float} width - character width
+* @property {Float} height - character height (uppercase)
+* @property {Array} segments - character segments [[[x, y], ...], ...]
+*/
+
+/** Construct a {@link VectorCharObject} from a ascii character whose code is between 31 and 127,
+* if the character is not supported it is replaced by a question mark.
+* @param {Object|String} [options] - options for construction or ascii character
+* @param {Float} [options.xOffset=0] - x offset
+* @param {Float} [options.yOffset=0] - y offset
+* @param {Float} [options.height=21] - font size (uppercase height)
+* @param {Float} [options.extrudeOffset=0] - width of the extrusion that will be applied (manually) after the creation of the character
+* @param {String} [options.input='?'] - ascii character (ignored/overwrited if provided as seconds parameter)
+* @param {String} [char='?'] - ascii character
+* @returns {VectorCharObject}
+*
+* @example
+* let vectorCharObject = vectorChar()
+* or
+* let vectorCharObject = vectorChar('A')
+* or
+* let vectorCharObject = vectorChar({ xOffset: 57 }, 'C')
+* or
+* let vectorCharObject = vectorChar({ xOffset: 78, input: '!' })
+*/
+function vectorChar (options, char) {
+  let {
+    xOffset, yOffset, input, font, height, extrudeOffset
+  } = vectorParams(options, char)
+  let code = input.charCodeAt(0)
+  if (!code || !font[code]) {
+    code = 63 // 63 => ?
+  }
+  let glyph = [].concat(font[code])
+  let ratio = (height - extrudeOffset) / font.height
+  let extrudeYOffset = (extrudeOffset / 2)
+  let width = glyph.shift() * ratio
+  let segments = []
+  let polyline = []
+  for (let i = 0, il = glyph.length; i < il; i += 2) {
+    gx = ratio * glyph[i] + xOffset
+    gy = ratio * glyph[i + 1] + yOffset + extrudeYOffset
+    if (glyph[i] !== undefined) {
+      polyline.push([ gx, gy ])
+      continue
+    }
+    segments.push(polyline)
+    polyline = []
+    i--
+  }
+  if (polyline.length) {
+    segments.push(polyline)
+  }
+  return { width, height, segments }
+}
+
+/** Construct an array of character segments from a ascii string whose characters code is between 31 and 127,
+* if one character is not supported it is replaced by a question mark.
+* @param {Object|String} [options] - options for construction or ascii string
+* @param {Float} [options.xOffset=0] - x offset
+* @param {Float} [options.yOffset=0] - y offset
+* @param {Float} [options.height=21] - font size (uppercase height)
+* @param {Float} [options.lineSpacing=1.4] - line spacing expressed as a percentage of font size
+* @param {Float} [options.letterSpacing=1] - extra letter spacing expressed as a percentage of font size
+* @param {String} [options.align='left'] - multi-line text alignement: left, center or right
+* @param {Float} [options.extrudeOffset=0] - width of the extrusion that will be applied (manually) after the creation of the character
+* @param {String} [options.input='?'] - ascii string (ignored/overwrited if provided as seconds parameter)
+* @param {String} [text='?'] - ascii string
+* @returns {Array} characters segments [[[x, y], ...], ...]
+*
+* @example
+* let textSegments = vectorText()
+* or
+* let textSegments = vectorText('OpenJSCAD')
+* or
+* let textSegments = vectorText({ yOffset: -50 }, 'OpenJSCAD')
+* or
+* let textSegments = vectorText({ yOffset: -80, input: 'OpenJSCAD' })
+*/
+function vectorText (options, text) {
+  let {
+    xOffset, yOffset, input, font, height, align, extrudeOffset, lineSpacing, letterSpacing
+  } = vectorParams(options, text)
+  let [ x, y ] = [ xOffset, yOffset ]
+  let [ i, il, char, vect, width, diff ] = []
+  let line = { width: 0, segments: [] }
+  let lines = []
+  let output = []
+  let maxWidth = 0
+  let lineStart = x
+  const pushLine = () => {
+    lines.push(line)
+    maxWidth = Math.max(maxWidth, line.width)
+    line = { width: 0, segments: [] }
+  }
+  for (i = 0, il = input.length; i < il; i++) {
+    char = input[i]
+    vect = vectorChar({ xOffset: x, yOffset: y, font, height, extrudeOffset }, char)
+    if (char === '\n') {
+      x = lineStart
+      y -= vect.height * lineSpacing
+      pushLine()
+      continue
+    }
+    width = vect.width * letterSpacing
+    line.width += width
+    x += width
+    if (char !== ' ') {
+      line.segments = line.segments.concat(vect.segments)
+    }
+  }
+  if (line.segments.length) {
+    pushLine()
+  }
+  for (i = 0, il = lines.length; i < il; i++) {
+    line = lines[i]
+    if (maxWidth > line.width) {
+      diff = maxWidth - line.width
+      if (align === 'right') {
+        line = translateLine({ x: diff }, line)
+      } else if (align === 'center') {
+        line = translateLine({ x: diff / 2 }, line)
+      }
+    }
+    output = output.concat(line.segments)
   }
   return output
 }
 
-// -- data below from http://paulbourke.net/dataformats/hershey/
-const simplexFont = [
-  0, 16, /* Ascii 32 */
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 10, /* Ascii 33 */
-  5, 21, 5, 7, -1, -1, 5, 2, 4, 1, 5, 0, 6, 1, 5, 2, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  5, 16, /* Ascii 34 */
-  4, 21, 4, 14, -1, -1, 12, 21, 12, 14, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  11, 21, /* Ascii 35 */
-  11, 25, 4, -7, -1, -1, 17, 25, 10, -7, -1, -1, 4, 12, 18, 12, -1, -1, 3, 6, 17, 6, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  26, 20, /* Ascii 36 */
-  8, 25, 8, -4, -1, -1, 12, 25, 12, -4, -1, -1, 17, 18, 15, 20, 12, 21, 8, 21, 5, 20, 3,
-  18, 3, 16, 4, 14, 5, 13, 7, 12, 13, 10, 15, 9, 16, 8, 17, 6, 17, 3, 15, 1, 12, 0,
-  8, 0, 5, 1, 3, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  31, 24, /* Ascii 37 */
-  21, 21, 3, 0, -1, -1, 8, 21, 10, 19, 10, 17, 9, 15, 7, 14, 5, 14, 3, 16, 3, 18, 4,
-  20, 6, 21, 8, 21, 10, 20, 13, 19, 16, 19, 19, 20, 21, 21, -1, -1, 17, 7, 15, 6, 14, 4,
-  14, 2, 16, 0, 18, 0, 20, 1, 21, 3, 21, 5, 19, 7, 17, 7, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  34, 26, /* Ascii 38 */
-  23, 12, 23, 13, 22, 14, 21, 14, 20, 13, 19, 11, 17, 6, 15, 3, 13, 1, 11, 0, 7, 0, 5,
-  1, 4, 2, 3, 4, 3, 6, 4, 8, 5, 9, 12, 13, 13, 14, 14, 16, 14, 18, 13, 20, 11, 21,
-  9, 20, 8, 18, 8, 16, 9, 13, 11, 10, 16, 3, 18, 1, 20, 0, 22, 0, 23, 1, 23, 2, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  7, 10, /* Ascii 39 */
-  5, 19, 4, 20, 5, 21, 6, 20, 6, 18, 5, 16, 4, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  10, 14, /* Ascii 40 */
-  11, 25, 9, 23, 7, 20, 5, 16, 4, 11, 4, 7, 5, 2, 7, -2, 9, -5, 11, -7, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  10, 14, /* Ascii 41 */
-  3, 25, 5, 23, 7, 20, 9, 16, 10, 11, 10, 7, 9, 2, 7, -2, 5, -5, 3, -7, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 16, /* Ascii 42 */
-  8, 21, 8, 9, -1, -1, 3, 18, 13, 12, -1, -1, 13, 18, 3, 12, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  5, 26, /* Ascii 43 */
-  13, 18, 13, 0, -1, -1, 4, 9, 22, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 10, /* Ascii 44 */
-  6, 1, 5, 0, 4, 1, 5, 2, 6, 1, 6, -1, 5, -3, 4, -4, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  2, 26, /* Ascii 45 */
-  4, 9, 22, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  5, 10, /* Ascii 46 */
-  5, 2, 4, 1, 5, 0, 6, 1, 5, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  2, 22, /* Ascii 47 */
-  20, 25, 2, -7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  17, 20, /* Ascii 48 */
-  9, 21, 6, 20, 4, 17, 3, 12, 3, 9, 4, 4, 6, 1, 9, 0, 11, 0, 14, 1, 16, 4, 17,
-  9, 17, 12, 16, 17, 14, 20, 11, 21, 9, 21, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  4, 20, /* Ascii 49 */
-  6, 17, 8, 18, 11, 21, 11, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  14, 20, /* Ascii 50 */
-  4, 16, 4, 17, 5, 19, 6, 20, 8, 21, 12, 21, 14, 20, 15, 19, 16, 17, 16, 15, 15, 13, 13,
-  10, 3, 0, 17, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  15, 20, /* Ascii 51 */
-  5, 21, 16, 21, 10, 13, 13, 13, 15, 12, 16, 11, 17, 8, 17, 6, 16, 3, 14, 1, 11, 0, 8,
-  0, 5, 1, 4, 2, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  6, 20, /* Ascii 52 */
-  13, 21, 3, 7, 18, 7, -1, -1, 13, 21, 13, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  17, 20, /* Ascii 53 */
-  15, 21, 5, 21, 4, 12, 5, 13, 8, 14, 11, 14, 14, 13, 16, 11, 17, 8, 17, 6, 16, 3, 14,
-  1, 11, 0, 8, 0, 5, 1, 4, 2, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  23, 20, /* Ascii 54 */
-  16, 18, 15, 20, 12, 21, 10, 21, 7, 20, 5, 17, 4, 12, 4, 7, 5, 3, 7, 1, 10, 0, 11,
-  0, 14, 1, 16, 3, 17, 6, 17, 7, 16, 10, 14, 12, 11, 13, 10, 13, 7, 12, 5, 10, 4, 7,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  5, 20, /* Ascii 55 */
-  17, 21, 7, 0, -1, -1, 3, 21, 17, 21, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  29, 20, /* Ascii 56 */
-  8, 21, 5, 20, 4, 18, 4, 16, 5, 14, 7, 13, 11, 12, 14, 11, 16, 9, 17, 7, 17, 4, 16,
-  2, 15, 1, 12, 0, 8, 0, 5, 1, 4, 2, 3, 4, 3, 7, 4, 9, 6, 11, 9, 12, 13, 13,
-  15, 14, 16, 16, 16, 18, 15, 20, 12, 21, 8, 21, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  23, 20, /* Ascii 57 */
-  16, 14, 15, 11, 13, 9, 10, 8, 9, 8, 6, 9, 4, 11, 3, 14, 3, 15, 4, 18, 6, 20, 9,
-  21, 10, 21, 13, 20, 15, 18, 16, 14, 16, 9, 15, 4, 13, 1, 10, 0, 8, 0, 5, 1, 4, 3,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  11, 10, /* Ascii 58 */
-  5, 14, 4, 13, 5, 12, 6, 13, 5, 14, -1, -1, 5, 2, 4, 1, 5, 0, 6, 1, 5, 2, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  14, 10, /* Ascii 59 */
-  5, 14, 4, 13, 5, 12, 6, 13, 5, 14, -1, -1, 6, 1, 5, 0, 4, 1, 5, 2, 6, 1, 6,
-  -1, 5, -3, 4, -4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  3, 24, /* Ascii 60 */
-  20, 18, 4, 9, 20, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  5, 26, /* Ascii 61 */
-  4, 12, 22, 12, -1, -1, 4, 6, 22, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  3, 24, /* Ascii 62 */
-  4, 18, 20, 9, 4, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  20, 18, /* Ascii 63 */
-  3, 16, 3, 17, 4, 19, 5, 20, 7, 21, 11, 21, 13, 20, 14, 19, 15, 17, 15, 15, 14, 13, 13,
-  12, 9, 10, 9, 7, -1, -1, 9, 2, 8, 1, 9, 0, 10, 1, 9, 2, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  55, 27, /* Ascii 64 */
-  18, 13, 17, 15, 15, 16, 12, 16, 10, 15, 9, 14, 8, 11, 8, 8, 9, 6, 11, 5, 14, 5, 16,
-  6, 17, 8, -1, -1, 12, 16, 10, 14, 9, 11, 9, 8, 10, 6, 11, 5, -1, -1, 18, 16, 17, 8,
-  17, 6, 19, 5, 21, 5, 23, 7, 24, 10, 24, 12, 23, 15, 22, 17, 20, 19, 18, 20, 15, 21, 12,
-  21, 9, 20, 7, 19, 5, 17, 4, 15, 3, 12, 3, 9, 4, 6, 5, 4, 7, 2, 9, 1, 12, 0,
-  15, 0, 18, 1, 20, 2, 21, 3, -1, -1, 19, 16, 18, 8, 18, 6, 19, 5,
-  8, 18, /* Ascii 65 */
-  9, 21, 1, 0, -1, -1, 9, 21, 17, 0, -1, -1, 4, 7, 14, 7, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  23, 21, /* Ascii 66 */
-  4, 21, 4, 0, -1, -1, 4, 21, 13, 21, 16, 20, 17, 19, 18, 17, 18, 15, 17, 13, 16, 12, 13,
-  11, -1, -1, 4, 11, 13, 11, 16, 10, 17, 9, 18, 7, 18, 4, 17, 2, 16, 1, 13, 0, 4, 0,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  18, 21, /* Ascii 67 */
-  18, 16, 17, 18, 15, 20, 13, 21, 9, 21, 7, 20, 5, 18, 4, 16, 3, 13, 3, 8, 4, 5, 5,
-  3, 7, 1, 9, 0, 13, 0, 15, 1, 17, 3, 18, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  15, 21, /* Ascii 68 */
-  4, 21, 4, 0, -1, -1, 4, 21, 11, 21, 14, 20, 16, 18, 17, 16, 18, 13, 18, 8, 17, 5, 16,
-  3, 14, 1, 11, 0, 4, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  11, 19, /* Ascii 69 */
-  4, 21, 4, 0, -1, -1, 4, 21, 17, 21, -1, -1, 4, 11, 12, 11, -1, -1, 4, 0, 17, 0, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 18, /* Ascii 70 */
-  4, 21, 4, 0, -1, -1, 4, 21, 17, 21, -1, -1, 4, 11, 12, 11, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  22, 21, /* Ascii 71 */
-  18, 16, 17, 18, 15, 20, 13, 21, 9, 21, 7, 20, 5, 18, 4, 16, 3, 13, 3, 8, 4, 5, 5,
-  3, 7, 1, 9, 0, 13, 0, 15, 1, 17, 3, 18, 5, 18, 8, -1, -1, 13, 8, 18, 8, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 22, /* Ascii 72 */
-  4, 21, 4, 0, -1, -1, 18, 21, 18, 0, -1, -1, 4, 11, 18, 11, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  2, 8, /* Ascii 73 */
-  4, 21, 4, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  10, 16, /* Ascii 74 */
-  12, 21, 12, 5, 11, 2, 10, 1, 8, 0, 6, 0, 4, 1, 3, 2, 2, 5, 2, 7, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 21, /* Ascii 75 */
-  4, 21, 4, 0, -1, -1, 18, 21, 4, 7, -1, -1, 9, 12, 18, 0, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  5, 17, /* Ascii 76 */
-  4, 21, 4, 0, -1, -1, 4, 0, 16, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  11, 24, /* Ascii 77 */
-  4, 21, 4, 0, -1, -1, 4, 21, 12, 0, -1, -1, 20, 21, 12, 0, -1, -1, 20, 21, 20, 0, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 22, /* Ascii 78 */
-  4, 21, 4, 0, -1, -1, 4, 21, 18, 0, -1, -1, 18, 21, 18, 0, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  21, 22, /* Ascii 79 */
-  9, 21, 7, 20, 5, 18, 4, 16, 3, 13, 3, 8, 4, 5, 5, 3, 7, 1, 9, 0, 13, 0, 15,
-  1, 17, 3, 18, 5, 19, 8, 19, 13, 18, 16, 17, 18, 15, 20, 13, 21, 9, 21, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  13, 21, /* Ascii 80 */
-  4, 21, 4, 0, -1, -1, 4, 21, 13, 21, 16, 20, 17, 19, 18, 17, 18, 14, 17, 12, 16, 11, 13,
-  10, 4, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  24, 22, /* Ascii 81 */
-  9, 21, 7, 20, 5, 18, 4, 16, 3, 13, 3, 8, 4, 5, 5, 3, 7, 1, 9, 0, 13, 0, 15,
-  1, 17, 3, 18, 5, 19, 8, 19, 13, 18, 16, 17, 18, 15, 20, 13, 21, 9, 21, -1, -1, 12, 4,
-  18, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  16, 21, /* Ascii 82 */
-  4, 21, 4, 0, -1, -1, 4, 21, 13, 21, 16, 20, 17, 19, 18, 17, 18, 15, 17, 13, 16, 12, 13,
-  11, 4, 11, -1, -1, 11, 11, 18, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  20, 20, /* Ascii 83 */
-  17, 18, 15, 20, 12, 21, 8, 21, 5, 20, 3, 18, 3, 16, 4, 14, 5, 13, 7, 12, 13, 10, 15,
-  9, 16, 8, 17, 6, 17, 3, 15, 1, 12, 0, 8, 0, 5, 1, 3, 3, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  5, 16, /* Ascii 84 */
-  8, 21, 8, 0, -1, -1, 1, 21, 15, 21, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  10, 22, /* Ascii 85 */
-  4, 21, 4, 6, 5, 3, 7, 1, 10, 0, 12, 0, 15, 1, 17, 3, 18, 6, 18, 21, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  5, 18, /* Ascii 86 */
-  1, 21, 9, 0, -1, -1, 17, 21, 9, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  11, 24, /* Ascii 87 */
-  2, 21, 7, 0, -1, -1, 12, 21, 7, 0, -1, -1, 12, 21, 17, 0, -1, -1, 22, 21, 17, 0, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  5, 20, /* Ascii 88 */
-  3, 21, 17, 0, -1, -1, 17, 21, 3, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  6, 18, /* Ascii 89 */
-  1, 21, 9, 11, 9, 0, -1, -1, 17, 21, 9, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 20, /* Ascii 90 */
-  17, 21, 3, 0, -1, -1, 3, 21, 17, 21, -1, -1, 3, 0, 17, 0, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  11, 14, /* Ascii 91 */
-  4, 25, 4, -7, -1, -1, 5, 25, 5, -7, -1, -1, 4, 25, 11, 25, -1, -1, 4, -7, 11, -7, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  2, 14, /* Ascii 92 */
-  0, 21, 14, -3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  11, 14, /* Ascii 93 */
-  9, 25, 9, -7, -1, -1, 10, 25, 10, -7, -1, -1, 3, 25, 10, 25, -1, -1, 3, -7, 10, -7, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  10, 16, /* Ascii 94 */
-  6, 15, 8, 18, 10, 15, -1, -1, 3, 12, 8, 17, 13, 12, -1, -1, 8, 17, 8, 0, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  2, 16, /* Ascii 95 */
-  0, -2, 16, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  7, 10, /* Ascii 96 */
-  6, 21, 5, 20, 4, 18, 4, 16, 5, 15, 6, 16, 5, 17, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  17, 19, /* Ascii 97 */
-  15, 14, 15, 0, -1, -1, 15, 11, 13, 13, 11, 14, 8, 14, 6, 13, 4, 11, 3, 8, 3, 6, 4,
-  3, 6, 1, 8, 0, 11, 0, 13, 1, 15, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  17, 19, /* Ascii 98 */
-  4, 21, 4, 0, -1, -1, 4, 11, 6, 13, 8, 14, 11, 14, 13, 13, 15, 11, 16, 8, 16, 6, 15,
-  3, 13, 1, 11, 0, 8, 0, 6, 1, 4, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  14, 18, /* Ascii 99 */
-  15, 11, 13, 13, 11, 14, 8, 14, 6, 13, 4, 11, 3, 8, 3, 6, 4, 3, 6, 1, 8, 0, 11,
-  0, 13, 1, 15, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  17, 19, /* Ascii 100 */
-  15, 21, 15, 0, -1, -1, 15, 11, 13, 13, 11, 14, 8, 14, 6, 13, 4, 11, 3, 8, 3, 6, 4,
-  3, 6, 1, 8, 0, 11, 0, 13, 1, 15, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  17, 18, /* Ascii 101 */
-  3, 8, 15, 8, 15, 10, 14, 12, 13, 13, 11, 14, 8, 14, 6, 13, 4, 11, 3, 8, 3, 6, 4,
-  3, 6, 1, 8, 0, 11, 0, 13, 1, 15, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 12, /* Ascii 102 */
-  10, 21, 8, 21, 6, 20, 5, 17, 5, 0, -1, -1, 2, 14, 9, 14, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  22, 19, /* Ascii 103 */
-  15, 14, 15, -2, 14, -5, 13, -6, 11, -7, 8, -7, 6, -6, -1, -1, 15, 11, 13, 13, 11, 14, 8,
-  14, 6, 13, 4, 11, 3, 8, 3, 6, 4, 3, 6, 1, 8, 0, 11, 0, 13, 1, 15, 3, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  10, 19, /* Ascii 104 */
-  4, 21, 4, 0, -1, -1, 4, 10, 7, 13, 9, 14, 12, 14, 14, 13, 15, 10, 15, 0, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 8, /* Ascii 105 */
-  3, 21, 4, 20, 5, 21, 4, 22, 3, 21, -1, -1, 4, 14, 4, 0, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  11, 10, /* Ascii 106 */
-  5, 21, 6, 20, 7, 21, 6, 22, 5, 21, -1, -1, 6, 14, 6, -3, 5, -6, 3, -7, 1, -7, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 17, /* Ascii 107 */
-  4, 21, 4, 0, -1, -1, 14, 14, 4, 4, -1, -1, 8, 8, 15, 0, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  2, 8, /* Ascii 108 */
-  4, 21, 4, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  18, 30, /* Ascii 109 */
-  4, 14, 4, 0, -1, -1, 4, 10, 7, 13, 9, 14, 12, 14, 14, 13, 15, 10, 15, 0, -1, -1, 15,
-  10, 18, 13, 20, 14, 23, 14, 25, 13, 26, 10, 26, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  10, 19, /* Ascii 110 */
-  4, 14, 4, 0, -1, -1, 4, 10, 7, 13, 9, 14, 12, 14, 14, 13, 15, 10, 15, 0, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  17, 19, /* Ascii 111 */
-  8, 14, 6, 13, 4, 11, 3, 8, 3, 6, 4, 3, 6, 1, 8, 0, 11, 0, 13, 1, 15, 3, 16,
-  6, 16, 8, 15, 11, 13, 13, 11, 14, 8, 14, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  17, 19, /* Ascii 112 */
-  4, 14, 4, -7, -1, -1, 4, 11, 6, 13, 8, 14, 11, 14, 13, 13, 15, 11, 16, 8, 16, 6, 15,
-  3, 13, 1, 11, 0, 8, 0, 6, 1, 4, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  17, 19, /* Ascii 113 */
-  15, 14, 15, -7, -1, -1, 15, 11, 13, 13, 11, 14, 8, 14, 6, 13, 4, 11, 3, 8, 3, 6, 4,
-  3, 6, 1, 8, 0, 11, 0, 13, 1, 15, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 13, /* Ascii 114 */
-  4, 14, 4, 0, -1, -1, 4, 8, 5, 11, 7, 13, 9, 14, 12, 14, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  17, 17, /* Ascii 115 */
-  14, 11, 13, 13, 10, 14, 7, 14, 4, 13, 3, 11, 4, 9, 6, 8, 11, 7, 13, 6, 14, 4, 14,
-  3, 13, 1, 10, 0, 7, 0, 4, 1, 3, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 12, /* Ascii 116 */
-  5, 21, 5, 4, 6, 1, 8, 0, 10, 0, -1, -1, 2, 14, 9, 14, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  10, 19, /* Ascii 117 */
-  4, 14, 4, 4, 5, 1, 7, 0, 10, 0, 12, 1, 15, 4, -1, -1, 15, 14, 15, 0, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  5, 16, /* Ascii 118 */
-  2, 14, 8, 0, -1, -1, 14, 14, 8, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  11, 22, /* Ascii 119 */
-  3, 14, 7, 0, -1, -1, 11, 14, 7, 0, -1, -1, 11, 14, 15, 0, -1, -1, 19, 14, 15, 0, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  5, 17, /* Ascii 120 */
-  3, 14, 14, 0, -1, -1, 14, 14, 3, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  9, 16, /* Ascii 121 */
-  2, 14, 8, 0, -1, -1, 14, 14, 8, 0, 6, -4, 4, -6, 2, -7, 1, -7, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  8, 17, /* Ascii 122 */
-  14, 14, 3, 0, -1, -1, 3, 14, 14, 14, -1, -1, 3, 0, 14, 0, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  39, 14, /* Ascii 123 */
-  9, 25, 7, 24, 6, 23, 5, 21, 5, 19, 6, 17, 7, 16, 8, 14, 8, 12, 6, 10, -1, -1, 7,
-  24, 6, 22, 6, 20, 7, 18, 8, 17, 9, 15, 9, 13, 8, 11, 4, 9, 8, 7, 9, 5, 9, 3,
-  8, 1, 7, 0, 6, -2, 6, -4, 7, -6, -1, -1, 6, 8, 8, 6, 8, 4, 7, 2, 6, 1, 5,
-  -1, 5, -3, 6, -5, 7, -6, 9, -7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  2, 8, /* Ascii 124 */
-  4, 25, 4, -7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  39, 14, /* Ascii 125 */
-  5, 25, 7, 24, 8, 23, 9, 21, 9, 19, 8, 17, 7, 16, 6, 14, 6, 12, 8, 10, -1, -1, 7,
-  24, 8, 22, 8, 20, 7, 18, 6, 17, 5, 15, 5, 13, 6, 11, 10, 9, 6, 7, 5, 5, 5, 3,
-  6, 1, 7, 0, 8, -2, 8, -4, 7, -6, -1, -1, 8, 8, 6, 6, 6, 4, 7, 2, 8, 1, 9,
-  -1, 9, -3, 8, -5, 7, -6, 5, -7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  23, 24, /* Ascii 126 */
-  3, 6, 3, 8, 4, 11, 6, 12, 8, 12, 10, 11, 14, 8, 16, 7, 18, 7, 20, 8, 21, 10, -1,
-  -1, 3, 8, 4, 10, 6, 11, 8, 11, 10, 10, 14, 7, 16, 6, 18, 6, 20, 7, 21, 10, 21, 12,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
-]
+/** Construct a {@link VectorCharObject} from a ascii character whose code is between 31 and 127,
+* if the character is not supported it is replaced by a question mark.
+* @param {Float} x - x offset
+* @param {Float} y - y offset
+* @param {String} char - ascii character
+* @returns {VectorCharObject}
+* @deprecated >= v2
+
+* @example
+* let vectorCharObject = vector_char(36, 0, 'B')
+*/
+function vector_char (x, y, char) {
+  return vectorChar({ xOffset: x, yOffset: y }, char)
+}
+
+/** Construct an array of character segments from a ascii string whose characters code is between 31 and 127,
+* if one character is not supported it is replaced by a question mark.
+* @param {Float} x - x offset
+* @param {Float} y - y offset
+* @param {String} text - ascii string
+* @returns {Array} characters segments [[[x, y], ...], ...]
+* @deprecated >= v2
+*
+* @example
+* let textSegments = vector_text(0, -20, 'OpenJSCAD')
+*/
+function vector_text (x, y, text) {
+  return vectorText({ xOffset: x, yOffset: y }, text)
+}
 
 module.exports = {
   vector_char,
-  vector_text
+  vector_text,
+  vectorChar,
+  vectorText
 }
 
-},{}],34:[function(require,module,exports){
+},{"../fonts/single-line/hershey/simplex.js":77,"./ops-booleans":28}],41:[function(require,module,exports){
 const {Connector} = require('./connectors')
 const Vertex3D = require('./math/Vertex3')
 const Vector2D = require('./math/Vector2')
@@ -6053,13 +5778,14 @@ const {fromSides, fromFakeCSG} = require('./CAGFactories')
 
 const canonicalize = require('./utils/canonicalize')
 const retesselate = require('./utils/retesellate')
-const {isCAGValid, isSelfIntersecting} = require('./utils/cagValidation')
+const {isCAGValid, isSelfIntersecting, hasPointInside} = require('./utils/cagValidation')
 const {area, getBounds} = require('./utils/cagMeasurements')
 
 // all of these are good candidates for elimination in this scope, since they are part of a functional api
 const {overCutInsideCorners} = require('../api/ops-cnc')
 const {extrudeInOrthonormalBasis, extrudeInPlane, extrude, rotateExtrude} = require('../api/ops-extrusions')
 const cagoutlinePaths = require('../api/cagOutlinePaths')
+const center = require('../api/center')
 const {expand, contract, expandedShellOfCAG} = require('../api/ops-expandContract')
 /**
  * Class CAG
@@ -6146,6 +5872,11 @@ CAG.prototype = {
   },
 
   // ALIAS !
+  center: function (axes) {
+    return center({axes: axes}, [this])
+  },
+
+  // ALIAS !
   expandedShell: function (radius, resolution) {
     return expandedShellOfCAG(this, radius, resolution)
   },
@@ -6215,6 +5946,11 @@ CAG.prototype = {
   // ALIAS !
   overCutInsideCorners: function (cutterradius) {
     return overCutInsideCorners(this, cutterradius)
+  },
+
+  // ALIAS !
+  hasPointInside: function (point) {
+    return hasPointInside(this, point)
   },
 
   // All the toXXX functions
@@ -6409,12 +6145,13 @@ CAG.prototype = {
 
 module.exports = CAG
 
-},{"../api/cagOutlinePaths":13,"../api/ops-cnc":22,"../api/ops-expandContract":24,"../api/ops-extrusions":25,"./CAGFactories":35,"./CSGFactories":37,"./connectors":42,"./math/Polygon3":51,"./math/Vector2":53,"./math/Vector3":54,"./math/Vertex3":56,"./utils/cagMeasurements":62,"./utils/cagValidation":63,"./utils/canonicalize":64,"./utils/retesellate":68}],35:[function(require,module,exports){
+},{"../api/cagOutlinePaths":19,"../api/center":20,"../api/ops-cnc":29,"../api/ops-expandContract":31,"../api/ops-extrusions":32,"./CAGFactories":42,"./CSGFactories":44,"./connectors":49,"./math/Polygon3":58,"./math/Vector2":60,"./math/Vector3":61,"./math/Vertex3":63,"./utils/cagMeasurements":69,"./utils/cagValidation":70,"./utils/canonicalize":71,"./utils/retesellate":75}],42:[function(require,module,exports){
 const Side = require('./math/Side')
 const Vector2D = require('./math/Vector2')
 const Vertex2 = require('./math/Vertex2')
 const {areaEPS} = require('./constants')
-const {isSelfIntersecting} = require('./utils/cagValidation')
+const {isSelfIntersecting, contains} = require('./utils/cagValidation')
+const {union, difference} = require('../api/ops-booleans')
 
 /** Construct a CAG from a list of `Side` instances.
  * @param {Side[]} sides - list of sides
@@ -6439,24 +6176,41 @@ const fromFakeCSG = function (csg) {
   return fromSides(sides)
 }
 
-/** Construct a CAG from a list of points (a polygon).
+/** Construct a CAG from a list of points (a polygon) or an nested array of points.
  * The rotation direction of the points is not relevant.
  * The points can define a convex or a concave polygon.
  * The polygon must not self intersect.
- * @param {points[]} points - list of points in 2D space
+ * Hole detection follows the even/odd rule,
+ * which means that the order of the paths is not important.
+ * @param {points[]|Array.<points[]>} points - (nested) list of points in 2D space
  * @returns {CAG} new CAG object
  */
 const fromPoints = function (points) {
-  let numpoints = points.length
-  if (numpoints < 3) throw new Error('CAG shape needs at least 3 points')
+  if (!points) {
+    throw new Error('points parameter must be defined')
+  }
+  if (!Array.isArray(points)) {
+    throw new Error('points parameter must be an array')
+  }
+  if (points[0].x !== undefined || typeof points[0][0] === 'number') {
+    return fromPointsArray(points)
+  }
+  if (typeof points[0][0] === 'object') {
+    return fromNestedPointsArray(points)
+  }
+  throw new Error('Unsupported points list format')
+}
+
+// Do not export the two following function (code splitting for fromPoints())
+const fromPointsArray = function (points) {
+  if (points.length < 3) {
+    throw new Error('CAG shape needs at least 3 points')
+  }
   let sides = []
-  let prevpoint = new Vector2D(points[numpoints - 1])
-  let prevvertex = new Vertex2(prevpoint)
-  points.map(function (p) {
-    let point = new Vector2D(p)
-    let vertex = new Vertex2(point)
-    let side = new Side(prevvertex, vertex)
-    sides.push(side)
+  let prevvertex = new Vertex2(new Vector2D(points[points.length - 1]))
+  points.map(function (point) {
+    let vertex = new Vertex2(new Vector2D(point))
+    sides.push(new Side(prevvertex, vertex))
     prevvertex = vertex
   })
   let result = fromSides(sides)
@@ -6470,8 +6224,55 @@ const fromPoints = function (points) {
   if (area < 0) {
     result = result.flipped()
   }
-  result = result.canonicalized()
-  return result
+  return result.canonicalized()
+}
+
+const fromNestedPointsArray = function (points) {
+  if (points.length === 1) {
+    return fromPoints(points[0])
+  }
+  // First pass: create a collection of CAG paths
+  let paths = []
+  points.forEach(path => {
+    paths.push(fromPointsArray(path))
+  })
+  // Second pass: make a tree of paths
+  let tree = {}
+    // for each polygon extract parents and childs polygons
+  paths.forEach((p1, i) => {
+    // check for intersection
+    paths.forEach((p2, y) => {
+      if (p1 !== p2) {
+        // create default node
+        tree[i] || (tree[i] = { parents: [], isHole: false })
+        tree[y] || (tree[y] = { parents: [], isHole: false })
+        // check if polygon2 stay in poylgon1
+        if (contains(p2, p1)) {
+          // push parent and child; odd parents number ==> hole
+          tree[i].parents.push(y)
+          tree[i].isHole = !! (tree[i].parents.length % 2)
+          tree[y].isHole = !! (tree[y].parents.length % 2)
+        }
+      }
+    })
+  })
+  // Third pass: subtract holes
+  let path = null
+  for (key in tree) {
+    path = tree[key]
+    if (path.isHole) {
+      delete tree[key] // remove holes for final pass
+      path.parents.forEach(parentKey => {
+        paths[parentKey] = difference(paths[parentKey], paths[key])
+      })
+    }
+  }
+  // Fourth and last pass: create final CAG object
+  let cag = fromSides([])
+  for (key in tree) {
+    cag = union(cag, paths[key])
+  }
+  return cag
 }
 
 /** Reconstruct a CAG from an object with identical property names.
@@ -6560,7 +6361,7 @@ module.exports = {
   fromCompactBinary
 }
 
-},{"./CAG":34,"./constants":43,"./math/Side":52,"./math/Vector2":53,"./math/Vertex2":55,"./utils/cagValidation":63}],36:[function(require,module,exports){
+},{"../api/ops-booleans":28,"./CAG":41,"./constants":50,"./math/Side":59,"./math/Vector2":60,"./math/Vertex2":62,"./utils/cagValidation":70}],43:[function(require,module,exports){
 const Tree = require('./trees')
 const Polygon = require('./math/Polygon3')
 const Plane = require('./math/Plane')
@@ -6579,6 +6380,7 @@ const {projectToOrthoNormalBasis} = require('./utils/csgProjections')
 
 const {lieFlat, getTransformationToFlatLying, getTransformationAndInverseTransformationToFlatLying} = require('../api/ops-cnc')
 const {sectionCut, cutByPlane} = require('../api/ops-cuts')
+const center = require('../api/center')
 const {expand, contract, expandedShellOfCCSG} = require('../api/ops-expandContract')
 
 /** Class CSG
@@ -6828,6 +6630,11 @@ CSG.prototype = {
     result.isRetesselated = this.isRetesselated
     result.isCanonicalized = this.isCanonicalized
     return result
+  },
+
+  // ALIAS !
+  center: function (axes) {
+    return center({axes: axes},[this])
   },
 
   // ALIAS !
@@ -7142,7 +6949,7 @@ CSG.prototype = {
 
 module.exports = CSG
 
-},{"../api/ops-cnc":22,"../api/ops-cuts":23,"../api/ops-expandContract":24,"./CAG":34,"./CSGFactories":37,"./Properties":41,"./math/OrthoNormalBasis":47,"./math/Plane":49,"./math/Polygon3":51,"./trees":60,"./utils/canonicalize":64,"./utils/csgMeasurements":65,"./utils/csgProjections":66,"./utils/fixTJunctions":67,"./utils/retesellate":68}],37:[function(require,module,exports){
+},{"../api/center":20,"../api/ops-cnc":29,"../api/ops-cuts":30,"../api/ops-expandContract":31,"./CAG":41,"./CSGFactories":44,"./Properties":48,"./math/OrthoNormalBasis":54,"./math/Plane":56,"./math/Polygon3":58,"./trees":67,"./utils/canonicalize":71,"./utils/csgMeasurements":72,"./utils/csgProjections":73,"./utils/fixTJunctions":74,"./utils/retesellate":75}],44:[function(require,module,exports){
 const Vector3D = require('./math/Vector3')
 const Vertex = require('./math/Vertex3')
 const Plane = require('./math/Plane')
@@ -7265,7 +7072,7 @@ module.exports = {
   fromCompactBinary
 }
 
-},{"./CSG":36,"./math/Plane":49,"./math/Polygon2":50,"./math/Polygon3":51,"./math/Vector3":54,"./math/Vertex3":56}],38:[function(require,module,exports){
+},{"./CSG":43,"./math/Plane":56,"./math/Polygon2":57,"./math/Polygon3":58,"./math/Vector3":61,"./math/Vertex3":63}],45:[function(require,module,exports){
 // //////////////////////////////
 // ## class fuzzyFactory
 // This class acts as a factory for objects. We can search for an object with approximately
@@ -7323,7 +7130,7 @@ FuzzyFactory.prototype = {
 
 module.exports = FuzzyFactory
 
-},{}],39:[function(require,module,exports){
+},{}],46:[function(require,module,exports){
 const FuzzyFactory = require('./FuzzyFactory')
 const {EPS} = require('./constants')
 const Side = require('./math/Side')
@@ -7350,7 +7157,7 @@ FuzzyCAGFactory.prototype = {
 
 module.exports = FuzzyCAGFactory
 
-},{"./FuzzyFactory":38,"./constants":43,"./math/Side":52}],40:[function(require,module,exports){
+},{"./FuzzyFactory":45,"./constants":50,"./math/Side":59}],47:[function(require,module,exports){
 const {EPS} = require('./constants')
 const Polygon = require('./math/Polygon3')
 const FuzzyFactory = require('./FuzzyFactory')
@@ -7420,7 +7227,7 @@ FuzzyCSGFactory.prototype = {
 
 module.exports = FuzzyCSGFactory
 
-},{"./FuzzyFactory":38,"./constants":43,"./math/Polygon3":51}],41:[function(require,module,exports){
+},{"./FuzzyFactory":45,"./constants":50,"./math/Polygon3":58}],48:[function(require,module,exports){
 // ////////////////////////////////////
 // # Class Properties
 // This class is used to store properties of a solid
@@ -7504,7 +7311,7 @@ Properties.addFrom = function (result, otherproperties) {
 
 module.exports = Properties
 
-},{}],42:[function(require,module,exports){
+},{}],49:[function(require,module,exports){
 const Vector3D = require('./math/Vector3')
 const Line3D = require('./math/Line3')
 const Matrix4x4 = require('./math/Matrix4')
@@ -7726,7 +7533,7 @@ ConnectorList.prototype = {
 
 module.exports = {Connector, ConnectorList}
 
-},{"./CSG":36,"./math/Line3":45,"./math/Matrix4":46,"./math/OrthoNormalBasis":47,"./math/Plane":49,"./math/Vector3":54}],43:[function(require,module,exports){
+},{"./CSG":43,"./math/Line3":52,"./math/Matrix4":53,"./math/OrthoNormalBasis":54,"./math/Plane":56,"./math/Vector3":61}],50:[function(require,module,exports){
 const _CSGDEBUG = false
 
 /** Number of polygons per 360 degree revolution for 2D objects.
@@ -7783,7 +7590,7 @@ module.exports = {
   getTag
 }
 
-},{}],44:[function(require,module,exports){
+},{}],51:[function(require,module,exports){
 const Vector2D = require('./Vector2')
 const {solve2Linear} = require('../utils')
 
@@ -7875,7 +7682,7 @@ Line2D.prototype = {
 
 module.exports = Line2D
 
-},{"../utils":61,"./Vector2":53}],45:[function(require,module,exports){
+},{"../utils":68,"./Vector2":60}],52:[function(require,module,exports){
 const Vector3D = require('./Vector3')
 const {EPS} = require('../constants')
 const {solve2Linear} = require('../utils')
@@ -7977,7 +7784,7 @@ Line3D.prototype = {
 
 module.exports = Line3D
 
-},{"../constants":43,"../utils":61,"./Vector3":54}],46:[function(require,module,exports){
+},{"../constants":50,"../utils":68,"./Vector3":61}],53:[function(require,module,exports){
 const Vector3D = require('./Vector3')
 const Vector2D = require('./Vector2')
 const OrthoNormalBasis = require('./OrthoNormalBasis')
@@ -8263,7 +8070,7 @@ Matrix4x4.scaling = function (v) {
 
 module.exports = Matrix4x4
 
-},{"./OrthoNormalBasis":47,"./Plane":49,"./Vector2":53,"./Vector3":54}],47:[function(require,module,exports){
+},{"./OrthoNormalBasis":54,"./Plane":56,"./Vector2":60,"./Vector3":61}],54:[function(require,module,exports){
 const Vector2D = require('./Vector2')
 const Vector3D = require('./Vector3')
 const Line2D = require('./Line2')
@@ -8470,7 +8277,7 @@ OrthoNormalBasis.prototype = {
 
 module.exports = OrthoNormalBasis
 
-},{"./Line2":44,"./Line3":45,"./Matrix4":46,"./Plane":49,"./Vector2":53,"./Vector3":54}],48:[function(require,module,exports){
+},{"./Line2":51,"./Line3":52,"./Matrix4":53,"./Plane":56,"./Vector2":60,"./Vector3":61}],55:[function(require,module,exports){
 const Vector2D = require('./Vector2')
 const {EPS, angleEPS} = require('../constants')
 const {parseOptionAs2DVector, parseOptionAsFloat, parseOptionAsInt, parseOptionAsBool} = require('../../api/optionParsers')
@@ -8632,6 +8439,27 @@ Path2D.prototype = {
    */
   isClosed: function () {
     return this.closed
+  },
+
+  /**
+   * Determine the overall clockwise or anti-clockwise turn of a path.
+   * See: http://mathworld.wolfram.com/PolygonArea.html
+   * @returns {String} One of ['clockwise', 'counter-clockwise', 'straight'].
+   */
+  getTurn: function () {
+    const points = this.points;
+    let twice_area = 0;
+    let last = points.length - 1;
+    for (let current = 0; current < points.length; last = current++) {
+      twice_area += points[last].x * points[current].y - points[last].y * points[current].x;
+    }
+    if (twice_area > 0) {
+      return 'clockwise';
+    } else if (twice_area < 0) {
+      return 'counter-clockwise';
+    } else {
+      return 'straight';
+    }
   },
 
     // Extrude the path by following it with a rectangle (upright, perpendicular to the path direction)
@@ -8943,7 +8771,7 @@ Path2D.prototype = {
 
 module.exports = Path2D
 
-},{"../../api/optionParsers":27,"../CAG":34,"../constants":43,"./Side":52,"./Vector2":53,"./Vertex2":55}],49:[function(require,module,exports){
+},{"../../api/optionParsers":34,"../CAG":41,"../constants":50,"./Side":59,"./Vector2":60,"./Vertex2":62}],56:[function(require,module,exports){
 const Vector3D = require('./Vector3')
 const Line3D = require('./Line3')
 const {EPS, getTag} = require('../constants')
@@ -9085,7 +8913,7 @@ Plane.prototype = {
 
 module.exports = Plane
 
-},{"../constants":43,"./Line3":45,"./Vector3":54}],50:[function(require,module,exports){
+},{"../constants":50,"./Line3":52,"./Vector3":61}],57:[function(require,module,exports){
 const CAG = require('../CAG')
 const {fromPoints} = require('../CAGFactories')
 
@@ -9107,7 +8935,7 @@ Polygon2D.prototype = CAG.prototype
 
 module.exports = Polygon2D
 
-},{"../CAG":34,"../CAGFactories":35}],51:[function(require,module,exports){
+},{"../CAG":41,"../CAGFactories":42}],58:[function(require,module,exports){
 const Vector3D = require('./Vector3')
 const Vertex = require('./Vertex3')
 const Matrix4x4 = require('./Matrix4')
@@ -9483,7 +9311,7 @@ Polygon.defaultShared = new Polygon.Shared(null)
 
 module.exports = Polygon
 
-},{"../../api/solidFromSlices":32,"../CAG":34,"../CAGFactories":35,"../CSGFactories":37,"../constants":43,"./Matrix4":46,"./Plane":49,"./Vector3":54,"./Vertex3":56}],52:[function(require,module,exports){
+},{"../../api/solidFromSlices":39,"../CAG":41,"../CAGFactories":42,"../CSGFactories":44,"../constants":50,"./Matrix4":53,"./Plane":56,"./Vector3":61,"./Vertex3":63}],59:[function(require,module,exports){
 const Vector2D = require('./Vector2')
 const Vertex = require('./Vertex2')
 const Vertex3 = require('./Vertex3')
@@ -9587,7 +9415,7 @@ Side.prototype = {
 
 module.exports = Side
 
-},{"../constants":43,"./Polygon3":51,"./Vector2":53,"./Vertex2":55,"./Vertex3":56}],53:[function(require,module,exports){
+},{"../constants":50,"./Polygon3":58,"./Vector2":60,"./Vertex2":62,"./Vertex3":63}],60:[function(require,module,exports){
 const {IsFloat} = require('../utils')
 
 /** Class Vector2D
@@ -9785,7 +9613,7 @@ Vector2D.prototype = {
 
 module.exports = Vector2D
 
-},{"../utils":61,"./Vector3":54}],54:[function(require,module,exports){
+},{"../utils":68,"./Vector3":61}],61:[function(require,module,exports){
 const {IsFloat} = require('../utils')
 const Vector2D = require('./Vector2')
 
@@ -10000,7 +9828,7 @@ Vector3D.prototype = {
 
 module.exports = Vector3D
 
-},{"../utils":61,"./Vector2":53}],55:[function(require,module,exports){
+},{"../utils":68,"./Vector2":60}],62:[function(require,module,exports){
 const Vector2D = require('./Vector2')
 const {getTag} = require('../constants')
 
@@ -10028,7 +9856,7 @@ Vertex.prototype = {
 
 module.exports = Vertex
 
-},{"../constants":43,"./Vector2":53}],56:[function(require,module,exports){
+},{"../constants":50,"./Vector2":60}],63:[function(require,module,exports){
 const Vector3D = require('./Vector3')
 const {getTag} = require('../constants')
 
@@ -10086,7 +9914,7 @@ Vertex.prototype = {
 
 module.exports = Vertex
 
-},{"../constants":43,"./Vector3":54}],57:[function(require,module,exports){
+},{"../constants":50,"./Vector3":61}],64:[function(require,module,exports){
 const {EPS} = require('../constants')
 const {solve2Linear} = require('../utils')
 
@@ -10112,7 +9940,7 @@ const linesIntersect = function (p0start, p0end, p1start, p1end) {
 
 module.exports = {linesIntersect}
 
-},{"../constants":43,"../utils":61}],58:[function(require,module,exports){
+},{"../constants":50,"../utils":68}],65:[function(require,module,exports){
 const {EPS} = require('../constants')
 const OrthoNormalBasis = require('./OrthoNormalBasis')
 const {interpolateBetween2DPointsForY, insertSorted, fnNumberSort} = require('../utils')
@@ -10456,7 +10284,7 @@ const reTesselateCoplanarPolygons = function (sourcepolygons, destpolygons) {
 
 module.exports = reTesselateCoplanarPolygons
 
-},{"../constants":43,"../utils":61,"./Line2":44,"./OrthoNormalBasis":47,"./Polygon3":51,"./Vector2":53,"./Vertex3":56}],59:[function(require,module,exports){
+},{"../constants":50,"../utils":68,"./Line2":51,"./OrthoNormalBasis":54,"./Polygon3":58,"./Vector2":60,"./Vertex3":63}],66:[function(require,module,exports){
 const Matrix4x4 = require('./math/Matrix4')
 const Vector3D = require('./math/Vector3')
 const Plane = require('./math/Plane')
@@ -10539,7 +10367,7 @@ module.exports = {
   addCenteringToPrototype
 }
 
-},{"./math/Matrix4":46,"./math/Plane":49,"./math/Vector3":54}],60:[function(require,module,exports){
+},{"./math/Matrix4":53,"./math/Plane":56,"./math/Vector3":61}],67:[function(require,module,exports){
 const {_CSGDEBUG, EPS} = require('./constants')
 const Vertex = require('./math/Vertex3')
 const Polygon = require('./math/Polygon3')
@@ -11050,7 +10878,7 @@ Node.prototype = {
 
 module.exports = Tree
 
-},{"./constants":43,"./math/Polygon3":51,"./math/Vertex3":56}],61:[function(require,module,exports){
+},{"./constants":50,"./math/Polygon3":58,"./math/Vertex3":63}],68:[function(require,module,exports){
 function fnNumberSort (a, b) {
   return a - b
 }
@@ -11154,7 +10982,7 @@ module.exports = {
   isCSG
 }
 
-},{}],62:[function(require,module,exports){
+},{}],69:[function(require,module,exports){
 const Vector2D = require('../math/Vector2')
 
 // see http://local.wasp.uwa.edu.au/~pbourke/geometry/polyarea/ :
@@ -11188,7 +11016,7 @@ const getBounds = function (cag) {
 
 module.exports = {area, getBounds}
 
-},{"../math/Vector2":53}],63:[function(require,module,exports){
+},{"../math/Vector2":60}],70:[function(require,module,exports){
 const {areaEPS} = require('../constants')
 const {linesIntersect} = require('../math/lineUtils')
 
@@ -11243,9 +11071,54 @@ const isSelfIntersecting = function (cag, debug) {
   return false
 }
 
-module.exports = {isCAGValid, isSelfIntersecting}
+/** Check if the point stay inside the CAG shape
+* ray-casting algorithm based on :
+* https://github.com/substack/point-in-polygon/blob/master/index.js
+* http://www.ecse.rp1.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
+* originaly writed for https://github.com/lautr3k/SLAcer.js/blob/dev/js/slacer/slicer.js#L82
+* @param {CAG} cag - CAG object
+* @param {Object} p0 - Vertex2 like object
+* @returns {Boolean}
+*/
+const hasPointInside = function (cag, p0) {
+  let p1 = null
+  let p2 = null
+  let inside = false
+  cag.sides.forEach(side => {
+    p1 = side.vertex0.pos
+    p2 = side.vertex1.pos
+    if (hasPointInside.c1(p0, p1, p2) && hasPointInside.c2(p0, p1, p2)) {
+      inside = !inside
+    }
+  })
+  return inside
+}
 
-},{"../constants":43,"../math/lineUtils":57}],64:[function(require,module,exports){
+hasPointInside.c1 = (p0, p1, p2) => (p1.y > p0.y) !== (p2.y > p0.y)
+hasPointInside.c2 = (p0, p1, p2) => (p0.x < (p2.x - p1.x) * (p0.y - p1.y) / (p2.y - p1.y) + p1.x)
+
+/** Check if all points from one CAG stay inside another CAG
+* @param {CAG} cag1 - CAG object
+* @param {Object} cag2 - CAG object
+* @returns {Boolean}
+*/
+const contains = function (cag1, cag2) {
+  for (let i = 0, il = cag2.sides.length; i < il; i++) {
+    if (!hasPointInside(cag1, cag2.sides[i].vertex0.pos)) {
+      return false
+    }
+  }
+  return true
+}
+
+module.exports = {
+  isCAGValid,
+  isSelfIntersecting,
+  hasPointInside,
+  contains
+}
+
+},{"../constants":50,"../math/lineUtils":64}],71:[function(require,module,exports){
 const {EPS} = require('../constants')
 const FuzzyCSGFactory = require('../FuzzyFactory3d')
 const FuzzyCAGFactory = require('../FuzzyFactory2d')
@@ -11331,7 +11204,7 @@ const CAGFromCAGFuzzyFactory = function (factory, sourcecag) {
 
 module.exports = canonicalize
 
-},{"../CAGFactories":35,"../CSGFactories":37,"../FuzzyFactory2d":39,"../FuzzyFactory3d":40,"../constants":43}],65:[function(require,module,exports){
+},{"../CAGFactories":42,"../CSGFactories":44,"../FuzzyFactory2d":46,"../FuzzyFactory3d":47,"../constants":50}],72:[function(require,module,exports){
 const Vector3D = require('../math/Vector3')
 
 /**
@@ -11381,7 +11254,7 @@ const area = function (csg) {
 
 module.exports = {bounds, volume, area}
 
-},{"../math/Vector3":54}],66:[function(require,module,exports){
+},{"../math/Vector3":61}],73:[function(require,module,exports){
 const CAG = require('../CAG') // FIXME: circular dependency !
 const {EPS} = require('../constants')
 
@@ -11406,7 +11279,7 @@ const projectToOrthoNormalBasis = function (csg, orthobasis) {
 
 module.exports = {projectToOrthoNormalBasis}
 
-},{"../CAG":34,"../constants":43}],67:[function(require,module,exports){
+},{"../CAG":41,"../constants":50}],74:[function(require,module,exports){
 const {EPS} = require('../constants')
 const Polygon = require('../math/Polygon3')
 const Plane = require('../math/Plane')
@@ -11724,7 +11597,7 @@ const fixTJunctions = function (fromPolygons, csg) {
 
 module.exports = fixTJunctions
 
-},{"../constants":43,"../math/Plane":49,"../math/Polygon3":51}],68:[function(require,module,exports){
+},{"../constants":50,"../math/Plane":56,"../math/Polygon3":58}],75:[function(require,module,exports){
 const FuzzyCSGFactory = require('../FuzzyFactory3d')
 const reTesselateCoplanarPolygons = require('../math/reTesselateCoplanarPolygons')
 const {fromPolygons} = require('../CSGFactories')
@@ -11773,43 +11646,6487 @@ const reTesselate = function (csg) {
 
 module.exports = reTesselate
 
-},{"../CSGFactories":37,"../FuzzyFactory3d":40,"../math/reTesselateCoplanarPolygons":58}],69:[function(require,module,exports){
-const mimeType = 'application/dxf'
-
-function serialize (cagObject) {
-  var paths = cagObject.getOutlinePaths()
-  return PathsToDxf(paths)
+},{"../CSGFactories":44,"../FuzzyFactory3d":47,"../math/reTesselateCoplanarPolygons":65}],76:[function(require,module,exports){
+/* converts input data to array if it is not already an array */
+function toArray (data) {
+  if (!data) return []
+  if (data.constructor !== Array) return [data]
+  return data
 }
 
-function PathsToDxf (paths) {
-  var str = '999\nDXF generated by OpenJsCad\n'
-  str += '  0\nSECTION\n  2\nHEADER\n'
-  str += '  0\nENDSEC\n'
-  str += '  0\nSECTION\n  2\nTABLES\n'
-  str += '  0\nTABLE\n  2\nLTYPE\n  70\n1\n'
-  str += '  0\nLTYPE\n  2\nCONTINUOUS\n  3\nSolid Line\n  72\n65\n  73\n0\n  40\n0.0\n'
-  str += '  0\nENDTAB\n'
-  str += '  0\nTABLE\n  2\nLAYER\n  70\n1\n'
-  str += '  0\nLAYER\n  2\nOpenJsCad\n  62\n7\n  6\ncontinuous\n'
-  str += '  0\nENDTAB\n'
-  str += '  0\nTABLE\n  2\nSTYLE\n  70\n0\n  0\nENDTAB\n'
-  str += '  0\nTABLE\n  2\nVIEW\n  70\n0\n  0\nENDTAB\n'
-  str += '  0\nENDSEC\n'
-  str += '  0\nSECTION\n  2\nBLOCKS\n'
-  str += '  0\nENDSEC\n'
-  str += '  0\nSECTION\n  2\nENTITIES\n'
-  paths.map(function (path) {
-    var numpointsClosed = path.points.length + (path.closed ? 1 : 0)
-    str += '  0\nLWPOLYLINE\n  8\nOpenJsCad\n  90\n' + numpointsClosed + '\n  70\n' + (path.closed ? 1 : 0) + '\n'
-    for (var pointindex = 0; pointindex < numpointsClosed; pointindex++) {
-      var pointindexwrapped = pointindex
-      if (pointindexwrapped >= path.points.length) pointindexwrapped -= path.points.length
-      var point = path.points[pointindexwrapped]
-      str += ' 10\n' + point.x + '\n 20\n' + point.y + '\n 30\n0.0\n'
+module.exports = toArray
+
+},{}],77:[function(require,module,exports){
+// -- data source from from http://paulbourke.net/dataformats/hershey/
+// -- reduced to save some bytes...
+// { [ascii code]: [width, x, y, ...] } - undefined value as path separator
+module.exports = {
+  height: 14,
+  32:[16],
+  33:[10,5,21,5,7,,5,2,4,1,5,0,6,1,5,2],
+  34:[16,4,21,4,14,,12,21,12,14],
+  35:[21,11,25,4,-7,,17,25,10,-7,,4,12,18,12,,3,6,17,6],
+  36:[20,8,25,8,-4,,12,25,12,-4,,17,18,15,20,12,21,8,21,5,20,3,18,3,16,4,14,5,13,7,12,13,10,15,9,16,8,17,6,17,3,15,1,12,0,8,0,5,1,3,3],
+  37:[24,21,21,3,0,,8,21,10,19,10,17,9,15,7,14,5,14,3,16,3,18,4,20,6,21,8,21,10,20,13,19,16,19,19,20,21,21,,17,7,15,6,14,4,14,2,16,0,18,0,20,1,21,3,21,5,19,7,17,7],
+  38:[26,23,12,23,13,22,14,21,14,20,13,19,11,17,6,15,3,13,1,11,0,7,0,5,1,4,2,3,4,3,6,4,8,5,9,12,13,13,14,14,16,14,18,13,20,11,21,9,20,8,18,8,16,9,13,11,10,16,3,18,1,20,0,22,0,23,1,23,2],
+  39:[10,5,19,4,20,5,21,6,20,6,18,5,16,4,15],
+  40:[14,11,25,9,23,7,20,5,16,4,11,4,7,5,2,7,-2,9,-5,11,-7],
+  41:[14,3,25,5,23,7,20,9,16,10,11,10,7,9,2,7,-2,5,-5,3,-7],
+  42:[16,8,21,8,9,,3,18,13,12,,13,18,3,12],
+  43:[26,13,18,13,0,,4,9,22,9],
+  44:[10,6,1,5,0,4,1,5,2,6,1,6,-1,5,-3,4,-4],
+  45:[26,4,9,22,9],
+  46:[10,5,2,4,1,5,0,6,1,5,2],
+  47:[22,20,25,2,-7],
+  48:[20,9,21,6,20,4,17,3,12,3,9,4,4,6,1,9,0,11,0,14,1,16,4,17,9,17,12,16,17,14,20,11,21,9,21],
+  49:[20,6,17,8,18,11,21,11,0],
+  50:[20,4,16,4,17,5,19,6,20,8,21,12,21,14,20,15,19,16,17,16,15,15,13,13,10,3,0,17,0],
+  51:[20,5,21,16,21,10,13,13,13,15,12,16,11,17,8,17,6,16,3,14,1,11,0,8,0,5,1,4,2,3,4],
+  52:[20,13,21,3,7,18,7,,13,21,13,0],
+  53:[20,15,21,5,21,4,12,5,13,8,14,11,14,14,13,16,11,17,8,17,6,16,3,14,1,11,0,8,0,5,1,4,2,3,4],
+  54:[20,16,18,15,20,12,21,10,21,7,20,5,17,4,12,4,7,5,3,7,1,10,0,11,0,14,1,16,3,17,6,17,7,16,10,14,12,11,13,10,13,7,12,5,10,4,7],
+  55:[20,17,21,7,0,,3,21,17,21],
+  56:[20,8,21,5,20,4,18,4,16,5,14,7,13,11,12,14,11,16,9,17,7,17,4,16,2,15,1,12,0,8,0,5,1,4,2,3,4,3,7,4,9,6,11,9,12,13,13,15,14,16,16,16,18,15,20,12,21,8,21],
+  57:[20,16,14,15,11,13,9,10,8,9,8,6,9,4,11,3,14,3,15,4,18,6,20,9,21,10,21,13,20,15,18,16,14,16,9,15,4,13,1,10,0,8,0,5,1,4,3],
+  58:[10,5,14,4,13,5,12,6,13,5,14,,5,2,4,1,5,0,6,1,5,2],
+  59:[10,5,14,4,13,5,12,6,13,5,14,,6,1,5,0,4,1,5,2,6,1,6,-1,5,-3,4,-4],
+  60:[24,20,18,4,9,20,0],
+  61:[26,4,12,22,12,,4,6,22,6],
+  62:[24,4,18,20,9,4,0],
+  63:[18,3,16,3,17,4,19,5,20,7,21,11,21,13,20,14,19,15,17,15,15,14,13,13,12,9,10,9,7,,9,2,8,1,9,0,10,1,9,2],
+  64:[27,18,13,17,15,15,16,12,16,10,15,9,14,8,11,8,8,9,6,11,5,14,5,16,6,17,8,,12,16,10,14,9,11,9,8,10,6,11,5,,18,16,17,8,17,6,19,5,21,5,23,7,24,10,24,12,23,15,22,17,20,19,18,20,15,21,12,21,9,20,7,19,5,17,4,15,3,12,3,9,4,6,5,4,7,2,9,1,12,0,15,0,18,1,20,2,21,3,,19,16,18,8,18,6,19,5],
+  65:[18,9,21,1,0,,9,21,17,0,,4,7,14,7],
+  66:[21,4,21,4,0,,4,21,13,21,16,20,17,19,18,17,18,15,17,13,16,12,13,11,,4,11,13,11,16,10,17,9,18,7,18,4,17,2,16,1,13,0,4,0],
+  67:[21,18,16,17,18,15,20,13,21,9,21,7,20,5,18,4,16,3,13,3,8,4,5,5,3,7,1,9,0,13,0,15,1,17,3,18,5],
+  68:[21,4,21,4,0,,4,21,11,21,14,20,16,18,17,16,18,13,18,8,17,5,16,3,14,1,11,0,4,0],
+  69:[19,4,21,4,0,,4,21,17,21,,4,11,12,11,,4,0,17,0],
+  70:[18,4,21,4,0,,4,21,17,21,,4,11,12,11],
+  71:[21,18,16,17,18,15,20,13,21,9,21,7,20,5,18,4,16,3,13,3,8,4,5,5,3,7,1,9,0,13,0,15,1,17,3,18,5,18,8,,13,8,18,8],
+  72:[22,4,21,4,0,,18,21,18,0,,4,11,18,11],
+  73:[8,4,21,4,0],
+  74:[16,12,21,12,5,11,2,10,1,8,0,6,0,4,1,3,2,2,5,2,7],
+  75:[21,4,21,4,0,,18,21,4,7,,9,12,18,0],
+  76:[17,4,21,4,0,,4,0,16,0],
+  77:[24,4,21,4,0,,4,21,12,0,,20,21,12,0,,20,21,20,0],
+  78:[22,4,21,4,0,,4,21,18,0,,18,21,18,0],
+  79:[22,9,21,7,20,5,18,4,16,3,13,3,8,4,5,5,3,7,1,9,0,13,0,15,1,17,3,18,5,19,8,19,13,18,16,17,18,15,20,13,21,9,21],
+  80:[21,4,21,4,0,,4,21,13,21,16,20,17,19,18,17,18,14,17,12,16,11,13,10,4,10],
+  81:[22,9,21,7,20,5,18,4,16,3,13,3,8,4,5,5,3,7,1,9,0,13,0,15,1,17,3,18,5,19,8,19,13,18,16,17,18,15,20,13,21,9,21,,12,4,18,-2],
+  82:[21,4,21,4,0,,4,21,13,21,16,20,17,19,18,17,18,15,17,13,16,12,13,11,4,11,,11,11,18,0],
+  83:[20,17,18,15,20,12,21,8,21,5,20,3,18,3,16,4,14,5,13,7,12,13,10,15,9,16,8,17,6,17,3,15,1,12,0,8,0,5,1,3,3],
+  84:[16,8,21,8,0,,1,21,15,21],
+  85:[22,4,21,4,6,5,3,7,1,10,0,12,0,15,1,17,3,18,6,18,21],
+  86:[18,1,21,9,0,,17,21,9,0],
+  87:[24,2,21,7,0,,12,21,7,0,,12,21,17,0,,22,21,17,0],
+  88:[20,3,21,17,0,,17,21,3,0],
+  89:[18,1,21,9,11,9,0,,17,21,9,11],
+  90:[20,17,21,3,0,,3,21,17,21,,3,0,17,0],
+  91:[14,4,25,4,-7,,5,25,5,-7,,4,25,11,25,,4,-7,11,-7],
+  92:[14,0,21,14,-3],
+  93:[14,9,25,9,-7,,10,25,10,-7,,3,25,10,25,,3,-7,10,-7],
+  94:[16,6,15,8,18,10,15,,3,12,8,17,13,12,,8,17,8,0],
+  95:[16,0,-2,16,-2],
+  96:[10,6,21,5,20,4,18,4,16,5,15,6,16,5,17],
+  97:[19,15,14,15,0,,15,11,13,13,11,14,8,14,6,13,4,11,3,8,3,6,4,3,6,1,8,0,11,0,13,1,15,3],
+  98:[19,4,21,4,0,,4,11,6,13,8,14,11,14,13,13,15,11,16,8,16,6,15,3,13,1,11,0,8,0,6,1,4,3],
+  99:[18,15,11,13,13,11,14,8,14,6,13,4,11,3,8,3,6,4,3,6,1,8,0,11,0,13,1,15,3],
+  100:[19,15,21,15,0,,15,11,13,13,11,14,8,14,6,13,4,11,3,8,3,6,4,3,6,1,8,0,11,0,13,1,15,3],
+  101:[18,3,8,15,8,15,10,14,12,13,13,11,14,8,14,6,13,4,11,3,8,3,6,4,3,6,1,8,0,11,0,13,1,15,3],
+  102:[12,10,21,8,21,6,20,5,17,5,0,,2,14,9,14],
+  103:[19,15,14,15,-2,14,-5,13,-6,11,-7,8,-7,6,-6,,15,11,13,13,11,14,8,14,6,13,4,11,3,8,3,6,4,3,6,1,8,0,11,0,13,1,15,3],
+  104:[19,4,21,4,0,,4,10,7,13,9,14,12,14,14,13,15,10,15,0],
+  105:[8,3,21,4,20,5,21,4,22,3,21,,4,14,4,0],
+  106:[10,5,21,6,20,7,21,6,22,5,21,,6,14,6,-3,5,-6,3,-7,1,-7],
+  107:[17,4,21,4,0,,14,14,4,4,,8,8,15,0],
+  108:[8,4,21,4,0],
+  109:[30,4,14,4,0,,4,10,7,13,9,14,12,14,14,13,15,10,15,0,,15,10,18,13,20,14,23,14,25,13,26,10,26,0],
+  110:[19,4,14,4,0,,4,10,7,13,9,14,12,14,14,13,15,10,15,0],
+  111:[19,8,14,6,13,4,11,3,8,3,6,4,3,6,1,8,0,11,0,13,1,15,3,16,6,16,8,15,11,13,13,11,14,8,14],
+  112:[19,4,14,4,-7,,4,11,6,13,8,14,11,14,13,13,15,11,16,8,16,6,15,3,13,1,11,0,8,0,6,1,4,3],
+  113:[19,15,14,15,-7,,15,11,13,13,11,14,8,14,6,13,4,11,3,8,3,6,4,3,6,1,8,0,11,0,13,1,15,3],
+  114:[13,4,14,4,0,,4,8,5,11,7,13,9,14,12,14],
+  115:[17,14,11,13,13,10,14,7,14,4,13,3,11,4,9,6,8,11,7,13,6,14,4,14,3,13,1,10,0,7,0,4,1,3,3],
+  116:[12,5,21,5,4,6,1,8,0,10,0,,2,14,9,14],
+  117:[19,4,14,4,4,5,1,7,0,10,0,12,1,15,4,,15,14,15,0],
+  118:[16,2,14,8,0,,14,14,8,0],
+  119:[22,3,14,7,0,,11,14,7,0,,11,14,15,0,,19,14,15,0],
+  120:[17,3,14,14,0,,14,14,3,0],
+  121:[16,2,14,8,0,,14,14,8,0,6,-4,4,-6,2,-7,1,-7],
+  122:[17,14,14,3,0,,3,14,14,14,,3,0,14,0],
+  123:[14,9,25,7,24,6,23,5,21,5,19,6,17,7,16,8,14,8,12,6,10,,7,24,6,22,6,20,7,18,8,17,9,15,9,13,8,11,4,9,8,7,9,5,9,3,8,1,7,0,6,-2,6,-4,7,-6,,6,8,8,6,8,4,7,2,6,1,5,-1,5,-3,6,-5,7,-6,9,-7],
+  124:[8,4,25,4,-7],
+  125:[14,5,25,7,24,8,23,9,21,9,19,8,17,7,16,6,14,6,12,8,10,,7,24,8,22,8,20,7,18,6,17,5,15,5,13,6,11,10,9,6,7,5,5,5,3,6,1,7,0,8,-2,8,-4,7,-6,,8,8,6,6,6,4,7,2,8,1,9,-1,9,-3,8,-5,7,-6,5,-7],
+  126:[24,3,6,3,8,4,11,6,12,8,12,10,11,14,8,16,7,18,7,20,8,21,10,,3,8,4,10,6,11,8,11,10,10,14,7,16,6,18,6,20,7,21,10,21,12]
+}
+
+},{}],78:[function(require,module,exports){
+/*
+## License
+
+Copyright (c) 2017 Z3 Development https://github.com/z3dev
+
+All code released under MIT license
+
+Thanks to @issacs for the sax js library, and inspiration for this reader
+
+*/
+
+// DXF reader to emit groups of interest to handlers
+
+;(function (dxf) { // wrapper for non-node envs
+  dxf.reader = function (options) { return new DxfReader(options) }
+
+  dxf.STATES = [
+    'start',
+    'end',
+    'error'
+  ]
+
+  /**
+   * Class DxfReader
+   * A class to hold state while reading DXF formatted data.
+   * @param {Object} [options] - options for parsing
+   * @param {Boolean} [options.track=true] - track position for error reporting
+   * @param {Boolean} [options.strict=false] - obey strict DXF specifications
+   * @constructor
+   *
+   * @example
+   * const dxfPath = path.resolve(__dirname, 'circle10.dxf')
+   * let src = fs.readFileSync(dxfPath, 'UTF8')
+   * let reader = dxf.reader({track: true})
+   * // setup state handling
+   * reader.on('error',handleError)
+   * reader.on('start',handleStart)
+   * reader.on('end'  ,handleEnd)
+   * // setup handling for groups of interest, skip the rest
+   * reader.absorb(0,handleEntity)
+   * // start the reader
+   * reader.write(src).close()
+   */
+  function DxfReader (options) {
+    var reader = this
+    reader.options = options || {}
+
+    reader.trackPosition = (reader.options.track !== false)
+    if (reader.trackPosition) {
+      reader.line = reader.column = reader.c = 0
+    }
+  }
+
+  DxfReader.prototype = {
+  // set a handler for the given state
+  // see dxf.STATES above
+    on: function (state, callback) {
+    // verify the state
+    // set the callback
+      var reader = this
+      reader['on' + state] = callback
+    },
+
+    // set a handler for the given group and value
+    absorb: function (group, callback) {
+      if (this.absorbers === undefined) {
+        this.absorbers = new Map()
+      }
+      this.absorbers.set(group, callback)
+    },
+
+    // write the given data into the reader, initiating parsing
+    write: function (data) {
+      var reader = this
+      parse(reader, data)
+      return reader
+    },
+
+    // close and clear all state
+    close: function () {
+      var reader = this
+      reader.isclosed = true
+      return reader
+    }
+  }
+
+  //
+  // emit the start of processing to the onstart handler if any
+  //
+  function emitstart (reader) {
+    return emitstate(reader, 'onstart', reader.data)
+  }
+
+  //
+  // emit the group (code and value) to asorbers
+  //
+  function emitgroup (reader, group, value) {
+    // console.log(group+": "+value)
+    // emit this group to all listeners
+    if (reader.absorbers !== undefined) {
+      var absorber = reader.absorbers.get(group)
+      if (absorber !== undefined) {
+        absorber(reader, group, value)
+      }
+    }
+  }
+
+  //
+  // wrap and emit the given error to the onerror handler if any
+  //
+  function emiterror (reader, er) {
+    // closeText(reader)
+    if (reader.trackPosition) {
+      er += `
+Line: ${reader.line}
+Column: ${reader.column}
+Char: ${reader.c}`
+    }
+    er = new Error(er)
+    reader.error = er
+    return emitstate(reader, 'onerror', er)
+  }
+
+  //
+  // emit the end of processing to the onend handler if any
+  //
+  function emitend (reader) {
+    return emitstate(reader, 'onend', reader.data)
+  }
+
+  function emitstate (reader, state, data) {
+    var onhandler = state.toString()
+    reader[onhandler] && reader[onhandler](reader, data)
+    return reader
+  }
+
+  //
+  // parse the given data in the context of the given reader
+  //
+  function parse (reader, data) {
+  // check reader state
+    if (reader.error) {
+      throw reader.error // throw the last error
+    }
+    if (reader.isclosed) {
+      return emiterror(reader, 'Cannot write after close')
+    }
+
+    emitstart(reader)
+
+    if (data === null) {
+      return emitend(reader)
+    }
+
+    // initial state to initiate parsing
+    reader.group = null
+    reader.value = null
+    reader.error = null
+
+    reader.position = 0
+    reader.line = 0
+    reader.column = 0
+
+    // use or convert the data to String
+    var i = 0
+    var c = ''
+    var l = ''
+    while (reader.error === null) {
+      c = charAt(data, i++)
+      if (!c) {
+        break
+      }
+      if (reader.trackPosition) {
+        reader.position++
+        if (c === '\n') {
+          reader.line++
+          reader.column = 0
+        } else {
+          reader.column++
+        }
+      }
+      // dxf files are parsed line by line
+      if (c === '\n') {
+        parseLine(reader, l)
+        l = ''
+      } else {
+        l += c
+      }
+    }
+    // emit state change
+    emitend(reader)
+    return reader
+  }
+
+  /** Parse the given line in the context of the given reader, emitting group value pairs
+   * @param reader {DxfReader} - context DxfReader to use
+   * @param line {String} - line to parse
+   */
+  function parseLine (reader, line) {
+    line = line.trim()
+    if (reader.group === null) {
+      setDxfGroup(reader, line)
+      reader.value = null
+    } else {
+      setDxfValue(reader, line)
+    }
+    // handle group and value pairs
+    if (reader.group !== null && reader.value !== null) {
+      // emit events for group and value pairs
+      emitgroup(reader, reader.group, reader.value)
+
+      reader.group = null
+      reader.value = null
+    }
+  }
+
+  /** Parse the given line in the context of the given reader, and update the group
+   * @param reader {DxfReader} - context DxfReader to use
+   * @param line {String} - line to parse
+   */
+  function setDxfGroup (reader, line) {
+  // groups are numeric
+    var code = parseInt(line)
+    if (isNaN(code)) {
+      emiterror(reader, 'Invalid group (int)')
+      reader.group = null
+    } else {
+      reader.group = code
+    }
+  }
+
+  /** Parse the given line in the context of the given reader, and update the (group) value
+   * @param reader {DxfReader} - context DxfReader to use
+   * @param line {String} - line to parse
+   */
+  function setDxfValue (reader, line) {
+    if (reader.options.strict) {
+      // TODO evaluate the value based on DXF specifications
+      reader.value = line
+    } else {
+      reader.value = line
+    }
+  }
+
+  //
+  // helper function to return expected values
+  //
+  function charAt (data, i) {
+    if (data && data.length > i) {
+      return data.charAt(i)
+    }
+    return ''
+  }
+})(typeof exports === 'undefined' ? this.dxf = {} : exports)
+
+},{}],79:[function(require,module,exports){
+/*
+AutoCAD Constants
+
+## License
+
+Copyright (c) 2017 Z3 Development https://github.com/z3dev
+
+All code released under MIT license
+*/
+
+//
+// translate group codes to names for use as object attributes
+//
+let dxfTLA = [
+  [0  , 'etyp'], [1 , 'text'], [2 , 'name'], [3 , 'nam1'],
+  [5  , 'hdle'], [6 , 'ltyp'], [7 , 'lsty'], [8 , 'lnam'], [9 , 'vari'],
+  [10 , 'pptx'], [11, 'sptx'], [12, 'tptx'], [13, 'fptx'],
+  [20 , 'ppty'], [21, 'spty'], [22, 'tpty'], [23, 'fpty'],
+  [30 , 'pptz'], [31, 'sptz'], [32, 'tptz'], [33, 'fptz'],
+  [38 , 'elev'], [39, 'lthk'],
+  [40 , 'swid'], [41, 'ewid'], [42, 'bulg'], [43, 'cwid'],
+  [48 , 'lscl'],
+  [50 , 'ang0'], [51, 'ang1'],
+  [60 , 'visb'], [62, 'cnmb'],
+  [67 , 'spac'],
+  [70 , 'lflg'], [71, 'fvia'], [72, 'fvib'], [73, 'fvic'], [74, 'fvid'],
+  [75 , 'cflg'],
+  [90 , 'vlen'], [91, 'slen'], [92, 'plen'], [93, 'flen'], [94, 'elen'],
+  [95 , 'clen'],
+  [100, 'sbnm'],
+  [210, 'etrx'],
+  [220, 'etry'],
+  [230, 'etrz']
+]
+
+let dxfMap = new Map(dxfTLA)
+
+const getTLA = function (group) {
+  return dxfMap.get(group)
+}
+
+/*
+ * AutoCAD Drawing Units
+ */
+const drawingUnits = [
+  [0, 'none'],
+  [1, 'inches'],
+  [2, 'feet'],
+  [3, 'miles'],
+  [4, 'millimeters'],
+  [5, 'centimeters'],
+  [6, 'meters'],
+  [7, 'kilometers'],
+  [8, 'microinches'],
+  [9, 'mils'],
+  [10, 'yards'],
+  [11, 'angstroms'],
+  [12, 'nanometers'],
+  [13, 'microns'],
+  [14, 'decimeters'],
+  [15, 'dekameters'],
+  [16, 'hectometers'],
+  [17, 'gigameters'],
+  [18, 'astrounits'],
+  [19, 'lightyears'],
+  [20, 'parsecs']
+]
+
+/*
+ * AutoCAD Color Index (0-255) as RGB + ALPHA colors
+ */
+
+const colorIndex = [
+  [255, 0, 0, 255],
+  [255, 255, 0, 255],
+  [0, 255, 0, 255],
+  [0, 255, 255, 255],
+  [0, 0, 255, 255],
+  [255, 0, 255, 255],
+  [255, 255, 255, 255],
+  [128, 128, 128, 255],
+  [192, 192, 192, 255],
+  [255, 0, 0, 255],
+  // 10
+  [255, 127, 127, 255],
+  [165, 0, 0, 255],
+  [165, 82, 82, 255],
+  [127, 0, 0, 255],
+  [127, 63, 63, 255],
+  [76, 0, 0, 255],
+  [76, 38, 38, 255],
+  [38, 0, 0, 255],
+  [38, 19, 19, 255],
+  [255, 63, 0, 255],
+  // 20
+  [255, 159, 127, 255],
+  [165, 41, 0, 255],
+  [165, 103, 82, 255],
+  [127, 31, 0, 255],
+  [127, 79, 63, 255],
+  [76, 19, 0, 255],
+  [76, 47, 38, 255],
+  [38, 9, 0, 255],
+  [38, 23, 19, 255],
+  [255, 127, 0, 255],
+  // 30
+  [255, 191, 127, 255],
+  [165, 82, 0, 255],
+  [165, 124, 82, 255],
+  [127, 63, 0, 255],
+  [127, 95, 63, 255],
+  [76, 38, 0, 255],
+  [76, 57, 38, 255],
+  [38, 19, 0, 255],
+  [38, 28, 19, 255],
+  [255, 191, 0, 255],
+  // 40
+  [255, 223, 127, 255],
+  [165, 124, 0, 255],
+  [165, 145, 82, 255],
+  [127, 95, 0, 255],
+  [127, 111, 63, 255],
+  [76, 57, 0, 255],
+  [76, 66, 38, 255],
+  [38, 28, 0, 255],
+  [38, 33, 19, 255],
+  // 50
+  [255, 255, 0, 255],
+  [255, 255, 127, 255],
+  [165, 165, 0, 255],
+  [165, 165, 82, 255],
+  [127, 127, 0, 255],
+  [127, 127, 63, 255],
+  [76, 76, 0, 255],
+  [76, 76, 38, 255],
+  [38, 38, 0, 255],
+  [38, 38, 19, 255],
+  // 60
+  [191, 255, 0, 255],
+  [223, 255, 127, 255],
+  [124, 165, 0, 255],
+  [145, 165, 82, 255],
+  [95, 127, 0, 255],
+  [111, 127, 63, 255],
+  [57, 76, 0, 255],
+  [66, 76, 38, 255],
+  [28, 38, 0, 255],
+  [33, 38, 19, 255],
+  // 70
+  [127, 255, 0, 255],
+  [191, 255, 127, 255],
+  [82, 165, 0, 255],
+  [124, 165, 82, 255],
+  [63, 127, 0, 255],
+  [95, 127, 63, 255],
+  [38, 76, 0, 255],
+  [57, 76, 38, 255],
+  [19, 38, 0, 255],
+  [28, 38, 19, 255],
+  // 80
+  [63, 255, 0, 255],
+  [159, 255, 127, 255],
+  [41, 165, 0, 255],
+  [103, 165, 82, 255],
+  [31, 127, 0, 255],
+  [127, 63, 255],
+  [19, 76, 0, 255],
+  [47, 76, 38, 255],
+  [9, 38, 0, 255],
+  [23, 38, 19, 255],
+  // 90
+  [0, 255, 0, 255],
+  [127, 255, 127, 255],
+  [0, 165, 0, 255],
+  [82, 165, 82, 255],
+  [0, 127, 0, 255],
+  [63, 127, 63, 255],
+  [0, 76, 0, 255],
+  [38, 76, 38, 255],
+  [0, 38, 0, 255],
+  [19, 38, 19, 255],
+  // 100
+  [0, 255, 63, 255],
+  [127, 255, 159, 255],
+  [0, 165, 41, 255],
+  [82, 165, 103, 255],
+  [0, 127, 31, 255],
+  [63, 127, 79, 255],
+  [0, 76, 19, 255],
+  [38, 76, 47, 255],
+  [0, 38, 9, 255],
+  [19, 38, 23, 255],
+  // 110
+  [0, 255, 127, 255],
+  [127, 255, 191, 255],
+  [0, 165, 82, 255],
+  [82, 165, 124, 255],
+  [0, 127, 63, 255],
+  [63, 127, 95, 255],
+  [0, 76, 38, 255],
+  [38, 76, 57, 255],
+  [0, 38, 19, 255],
+  [19, 38, 28, 255],
+  // 120
+  [0, 255, 191, 255],
+  [127, 255, 223, 255],
+  [0, 165, 124, 255],
+  [82, 165, 145, 255],
+  [0, 127, 95, 255],
+  [63, 127, 111, 255],
+  [0, 76, 57, 255],
+  [38, 76, 66, 255],
+  [0, 38, 28, 255],
+  [19, 38, 33, 255],
+  // 130
+  [0, 255, 255, 255],
+  [127, 255, 255, 255],
+  [0, 165, 165, 255],
+  [82, 165, 165, 255],
+  [0, 127, 127, 255],
+  [63, 127, 127, 255],
+  [0, 76, 76, 255],
+  [38, 76, 76, 255],
+  [0, 38, 38, 255],
+  [19, 38, 38, 255],
+  // 140
+  [0, 191, 255, 255],
+  [127, 223, 255, 255],
+  [0, 124, 165, 255],
+  [82, 145, 165, 255],
+  [0, 95, 127, 255],
+  [63, 111, 127, 255],
+  [0, 57, 76, 255],
+  [38, 66, 76, 255],
+  [0, 28, 38, 255],
+  [19, 33, 38, 255],
+  // 150
+  [0, 127, 255, 255],
+  [127, 191, 255, 255],
+  [0, 82, 165, 255],
+  [82, 124, 165, 255],
+  [0, 63, 127, 255],
+  [63, 95, 127, 255],
+  [0, 38, 76, 255],
+  [38, 57, 76, 255],
+  [0, 19, 38, 255],
+  [19, 28, 38, 255],
+  // 160
+  [0, 63, 255, 255],
+  [127, 159, 255, 255],
+  [0, 41, 165, 255],
+  [82, 103, 165, 255],
+  [0, 31, 127, 255],
+  [63, 79, 127, 255],
+  [0, 19, 76, 255],
+  [38, 47, 76, 255],
+  [0, 9, 38, 255],
+  [19, 23, 38, 255],
+  // 170
+  [0, 0, 255, 255],
+  [127, 127, 255, 255],
+  [0, 0, 165, 255],
+  [82, 82, 165, 255],
+  [0, 0, 127, 255],
+  [63, 63, 127, 255],
+  [0, 0, 76, 255],
+  [38, 38, 76, 255],
+  [0, 0, 38, 255],
+  [19, 19, 38, 255],
+  // 180
+  [63, 0, 255, 255],
+  [159, 127, 255, 255],
+  [41, 0, 165, 255],
+  [103, 82, 165, 255],
+  [31, 0, 127, 255],
+  [79, 63, 127, 255],
+  [19, 0, 76, 255],
+  [47, 38, 76, 255],
+  [9, 0, 38, 255],
+  [23, 19, 38, 255],
+  // 190
+  [127, 0, 255, 255],
+  [191, 127, 255, 255],
+  [82, 0, 165, 255],
+  [124, 82, 165, 255],
+  [63, 0, 127, 255],
+  [95, 63, 127, 255],
+  [38, 0, 76, 255],
+  [57, 38, 76, 255],
+  [19, 0, 38, 255],
+  [28, 19, 38, 255],
+  // 200
+  [191, 0, 255, 255],
+  [223, 127, 255, 255],
+  [124, 0, 165, 255],
+  [145, 82, 165, 255],
+  [95, 0, 127, 255],
+  [111, 63, 127, 255],
+  [57, 0, 76, 255],
+  [66, 38, 76, 255],
+  [28, 0, 38, 255],
+  [33, 19, 38, 255],
+  // 210
+  [255, 0, 255, 255],
+  [255, 127, 255, 255],
+  [165, 0, 165, 255],
+  [165, 82, 165, 255],
+  [127, 0, 127, 255],
+  [127, 63, 127, 255],
+  [76, 0, 76, 255],
+  [76, 38, 76, 255],
+  [38, 0, 38, 255],
+  [38, 19, 38, 255],
+  // 220
+  [255, 0, 191, 255],
+  [255, 127, 223, 255],
+  [165, 0, 124, 255],
+  [165, 82, 145, 255],
+  [127, 0, 95, 255],
+  [127, 63, 111, 255],
+  [76, 0, 57, 255],
+  [76, 38, 66, 255],
+  [38, 0, 28, 255],
+  [38, 19, 33, 255],
+  // 230
+  [255, 0, 127, 255],
+  [255, 127, 191, 255],
+  [165, 0, 82, 255],
+  [165, 82, 124, 255],
+  [127, 0, 63, 255],
+  [127, 63, 95, 255],
+  [76, 0, 38, 255],
+  [76, 38, 57, 255],
+  [38, 0, 19, 255],
+  [38, 19, 28, 255],
+  // 240
+  [255, 0, 63, 255],
+  [255, 127, 159, 255],
+  [165, 0, 41, 255],
+  [165, 82, 103, 255],
+  [127, 0, 31, 255],
+  [127, 63, 79, 255],
+  [76, 0, 19, 255],
+  [76, 38, 47, 255],
+  [38, 0, 9, 255],
+  [38, 19, 23, 255],
+  // 250
+  [84, 84, 84, 255],
+  [118, 118, 118, 255],
+  [160, 160, 160, 255],
+  [192, 192, 192, 255],
+  [224, 224, 224, 255],
+  [0, 0, 0, 255]
+]
+
+const BYBLOCK = 0
+const BYLAYER = 256
+
+module.exports = {
+  colorIndex,
+  BYBLOCK,
+  BYLAYER,
+  getTLA
+}
+
+},{}],80:[function(require,module,exports){
+/*
+## License
+
+Copyright (c) 2017 Z3 Development https://github.com/z3dev
+
+All code released under MIT license
+
+*/
+
+const {colorIndex, BYLAYER, getTLA} = require('./autocad')
+const dxf = require('./DxfReader')
+const {instantiateAsciiDxf} = require('./instantiate')
+const translateAsciiDxf = require('./translate')
+
+// //////////////////////////////////////////
+//
+// DXF (Drawing Exchange Format) is a CAD data file format developed by Autodesk
+//
+// //////////////////////////////////////////
+
+function handleError (reader, error) {
+  if (reader.options.strict === true) {
+    throw error
+  } else {
+    console.log(`error: line ${error.line}, column ${error.column}, bad character [${error.c}]`)
+  }
+}
+function handleStart (reader, data) {
+  //console.log('DXF reader started')
+}
+function handleEnd (reader, data) {
+  //console.log('DXF reader completed')
+}
+
+//
+// handle a entity as provided by the reader
+// groups: 0
+// special handling to set defaults as per DXF specifications
+//
+function handleEntity (reader, group, value) {
+  // console.log('entity: '+group+','+value)
+
+  let obj = null
+  switch (value) {
+    case 'LAYER':
+      obj = {type: 'layer'}
+      // entity defaults
+      obj[getTLA(48)] = 1.0
+      obj[getTLA(60)] = 0
+      // obj[getTLA(62)] = 256
+      obj[getTLA(67)] = 0
+      // layer defaults
+      reader.objstack.push(obj)
+      break
+    case 'LINE':
+      obj = {type: 'line'}
+      // entity defaults
+      obj[getTLA(48)] = 1.0
+      obj[getTLA(60)] = 0
+      obj[getTLA(62)] = BYLAYER
+      obj[getTLA(67)] = 0
+      // line defaults
+      obj[getTLA(210)] = 0
+      obj[getTLA(220)] = 0
+      obj[getTLA(230)] = 0
+
+      reader.objstack.push(obj)
+      break
+    case 'LWPOLYLINE':
+      obj = {type: 'lwpolyline'}
+      // entity defaults
+      obj[getTLA(48)] = 1.0
+      obj[getTLA(60)] = 0
+      obj[getTLA(62)] = BYLAYER
+      obj[getTLA(67)] = 0
+      // lwpolyline defaults
+      obj[getTLA(38)] = 0
+      obj[getTLA(39)] = 0
+      obj[getTLA(43)] = 0
+      obj[getTLA(70)] = 0
+      obj[getTLA(90)] = 0
+      obj[getTLA(210)] = 0
+      obj[getTLA(220)] = 0
+      obj[getTLA(230)] = 1
+
+      reader.objstack.push(obj)
+      break
+    case 'MESH':
+      obj = {type: 'mesh'}
+      // entity defaults
+      obj[getTLA(48)] = 1.0
+      obj[getTLA(60)] = 0
+      obj[getTLA(62)] = BYLAYER
+      obj[getTLA(67)] = 0
+      // mesh defaults
+      obj[getTLA(91)] = 0 // initialize lengths
+      obj[getTLA(92)] = 0
+      obj[getTLA(93)] = 0
+      obj[getTLA(94)] = 0
+      obj[getTLA(95)] = 0
+      obj['state'] = 0 // keep a state
+      reader.objstack.push(obj)
+      break
+    case 'POLYLINE':
+      obj = {type: 'polyline'}
+      // entity defaults
+      obj[getTLA(48)] = 1.0
+      obj[getTLA(60)] = 0
+      obj[getTLA(62)] = BYLAYER
+      obj[getTLA(67)] = 0
+      // polyline defaults
+      obj[getTLA(10)] = 0
+      obj[getTLA(20)] = 0
+      obj[getTLA(30)] = 0
+      obj[getTLA(39)] = 0
+      obj[getTLA(40)] = 0
+      obj[getTLA(41)] = 0
+      obj[getTLA(70)] = 0
+      obj[getTLA(71)] = 0
+      obj[getTLA(72)] = 0
+      obj[getTLA(73)] = 0
+      obj[getTLA(74)] = 0
+      obj[getTLA(75)] = 0
+      obj[getTLA(210)] = 0
+      obj[getTLA(220)] = 0
+      obj[getTLA(230)] = 1
+
+      reader.objstack.push(obj)
+      break
+    case 'ARC':
+      obj = {type: 'arc'}
+      // entity defaults
+      obj[getTLA(48)] = 1.0
+      obj[getTLA(60)] = 0
+      obj[getTLA(62)] = BYLAYER
+      obj[getTLA(67)] = 0
+      // arc defaults
+      obj[getTLA(39)] = 0
+      obj[getTLA(210)] = 0
+      obj[getTLA(220)] = 0
+      obj[getTLA(230)] = 1
+
+      reader.objstack.push(obj)
+      break
+    case 'CIRCLE':
+      obj = {type: 'circle'}
+      // entity defaults
+      obj[getTLA(48)] = 1.0
+      obj[getTLA(60)] = 0
+      obj[getTLA(62)] = BYLAYER
+      obj[getTLA(67)] = 0
+      // circle defaults
+      obj[getTLA(39)] = 0
+      obj[getTLA(210)] = 0
+      obj[getTLA(220)] = 0
+      obj[getTLA(230)] = 1
+
+      reader.objstack.push(obj)
+      break
+    case 'ELLIPSE':
+      obj = {type: 'ellipse'}
+      // entity defaults
+      obj[getTLA(48)] = 1.0
+      obj[getTLA(60)] = 0
+      obj[getTLA(62)] = BYLAYER
+      obj[getTLA(67)] = 0
+      // ellipse defaults
+      obj[getTLA(210)] = 0
+      obj[getTLA(220)] = 0
+      obj[getTLA(230)] = 1
+
+      reader.objstack.push(obj)
+      break
+    case 'VERTEX':
+      obj = {type: 'vertex'}
+      // entity defaults
+      obj[getTLA(48)] = 1.0
+      obj[getTLA(60)] = 0
+      obj[getTLA(62)] = BYLAYER
+      obj[getTLA(67)] = 0
+      // vertex defaults
+      obj[getTLA(10)] = 0
+      obj[getTLA(20)] = 0
+      obj[getTLA(30)] = 0
+      obj[getTLA(40)] = 0
+      obj[getTLA(41)] = 0
+      obj[getTLA(42)] = 0
+      obj[getTLA(70)] = 0
+      // polyface defaults (optional)
+      obj[getTLA(71)] = 0
+      obj[getTLA(72)] = 0
+      obj[getTLA(73)] = 0
+      obj[getTLA(74)] = 0
+
+      reader.objstack.push(obj)
+      break
+    case '3DFACE':
+      obj = {type: '3dface'}
+      // entity defaults
+      obj[getTLA(48)] = 1.0
+      obj[getTLA(60)] = 0
+      obj[getTLA(62)] = BYLAYER
+      obj[getTLA(67)] = 0
+      // face defaults
+      obj[getTLA(70)] = 0
+
+      reader.objstack.push(obj)
+      break
+    case 'SEQEND':
+      obj = {type: 'seqend'}
+      reader.objstack.push(obj)
+      break
+    default:
+      // push on an anonymous object which does not have type / attributes / values
+      obj = {}
+      reader.objstack.push(obj)
+      break
+  }
+}
+
+//
+// handle a varible as provided by the reader
+// groups: 9
+//
+function handleVariable (reader, group, value) {
+  // console.log('variable: '+group+','+value)
+  let obj = {type: 'variable', name: value}
+  reader.objstack.push(obj)
+}
+
+//
+// handle a int as provided by the reader
+// groups: 62, 70, 71, 72, 73, 74, 75, 210, 220, 230
+//
+function handleInt (reader, group, value) {
+  // console.log('int: '+group+','+value)
+  let obj = reader.objstack.pop()
+  if ('type' in obj) {
+    obj[getTLA(group)] = parseFloat(value)
+  }
+  reader.objstack.push(obj)
+}
+
+//
+// handle a double as provided by the reader
+// groups: 11, 12, 13, 21, 22, 23, 31, 32, 33, 39, 40, 41, 50, 51
+//
+function handleDouble (reader, group, value) {
+  // console.log('double: '+group+','+value)
+  let obj = reader.objstack.pop()
+  if ('type' in obj) {
+    obj[getTLA(group)] = parseFloat(value)
+  }
+  reader.objstack.push(obj)
+}
+
+//
+// handle a X coordinate as provided by the reader
+// groups: 10
+// special handling of (lwpolyline and mesh) float values
+//
+function handleXcoord (reader, group, value) {
+  // console.log('xcoord: '+group+','+value)
+  let obj = reader.objstack.pop()
+  if ('type' in obj) {
+    if (obj['type'] === 'lwpolyline') {
+    // special handling to build a list of vertices
+      if (obj['pptxs'] === undefined) {
+        obj['pptxs'] = []
+        obj['bulgs'] = []
+      }
+      obj['pptxs'].push(parseFloat(value))
+      obj['bulgs'].push(0)
+    } else {
+      if (obj['type'] === 'mesh') {
+      // special handling to build a list of vertices
+        if (obj['pptxs'] === undefined) {
+          obj['pptxs'] = []
+        }
+        obj['pptxs'].push(parseFloat(value))
+      } else {
+        obj[getTLA(group)] = parseFloat(value)
+      }
+    }
+  }
+  reader.objstack.push(obj)
+}
+
+//
+// handle a Y coordinate as provided by the reader
+// groups: 20
+// special handling of (lwpolyline and mesh) float values
+//
+function handleYcoord (reader, group, value) {
+  // console.log('ycoord: '+group+','+value)
+  let obj = reader.objstack.pop()
+  if ('type' in obj) {
+    if (obj['type'] === 'lwpolyline' || obj['type'] === 'mesh') {
+    // special handling to build a list of vertices
+      if (obj['pptys'] === undefined) {
+        obj['pptys'] = []
+      }
+      obj['pptys'].push(parseFloat(value))
+    } else {
+      obj[getTLA(group)] = parseFloat(value)
+    }
+  }
+  reader.objstack.push(obj)
+}
+
+//
+// handle a Z coordinate as provided by the reader
+// groups: 30
+// special handling of (mesh) float values
+//
+function handleZcoord (reader, group, value) {
+  // console.log('ycoord: '+group+','+value)
+  let obj = reader.objstack.pop()
+  if ('type' in obj) {
+    if (obj['type'] === 'mesh') {
+    // special handling to build a list of vertices
+      if (obj['pptzs'] === undefined) {
+        obj['pptzs'] = []
+      }
+      obj['pptzs'].push(parseFloat(value))
+    } else {
+      obj[getTLA(group)] = parseFloat(value)
+    }
+  }
+  reader.objstack.push(obj)
+}
+
+//
+// handle a bulge as provided by the reader
+// groups: 41
+// special handling of (lwpolyline) float values
+//
+function handleBulge (reader, group, value) {
+  // console.log('bulg: '+group+','+value)
+  let obj = reader.objstack.pop()
+  if ('type' in obj) {
+    if (obj['type'] === 'lwpolyline') {
+    // special handling to build a list of vertices
+      let bulgs = obj['bulgs']
+      if (bulgs !== undefined) {
+        let pptxs = obj['pptxs']
+        if (pptxs.length === bulgs.length) {
+          bulgs[bulgs.length - 1] = parseFloat(value)
+        }
+      }
+    } else {
+      obj[getTLA(group)] = parseFloat(value)
+    }
+  }
+  reader.objstack.push(obj)
+}
+
+//
+// handle a len as provided by the reader
+// groups: 91, 92, 93, 94, 95
+// special handling of (mesh) float values based on group and state
+//
+function handleLen (reader, group, value) {
+  // console.log('len: '+group+','+value)
+  let obj = reader.objstack.pop()
+  if ('type' in obj) {
+    if (obj['type'] === 'mesh') {
+    // mesh has an order of lengths
+      let state = obj['state']
+      // console.log('mesh len: '+group+','+value+','+state)
+      switch (group) {
+        case 91: // length of subdivisions
+          obj[getTLA(group)] = parseFloat(value)
+          obj['state'] = 1
+          break
+        case 92: // vertex count OR overriden property count
+          if (state === 1) {
+            obj['vlen'] = parseFloat(value) // override attribute
+            obj['state'] = 2
+          } else {
+            obj['plen'] = parseFloat(value) // override attribute
+            obj['state'] = 6
+          }
+          break
+        case 93: // face count
+          obj[getTLA(group)] = parseFloat(value)
+          obj['state'] = 3
+          break
+        case 94: // edge count
+          obj[getTLA(group)] = parseFloat(value)
+          obj['state'] = 4
+          break
+        case 95: // edge crease count
+          obj[getTLA(group)] = parseFloat(value)
+          obj['state'] = 5
+          break
+        default:
+          obj['state'] = 7
+          break
+      }
+    } else {
+      obj[getTLA(group)] = parseFloat(value)
+    }
+  }
+  reader.objstack.push(obj)
+}
+
+//
+// handle a value as provided by the reader
+// groups: 90
+// special handling of (mesh) float values based on state
+//
+function handleValue (reader, group, value) {
+  // console.log('int: '+group+','+value)
+  let obj = reader.objstack.pop()
+  if ('type' in obj) {
+    if (obj['type'] === 'mesh') {
+      let state = obj['state']
+      // console.log('mesh value: '+group+','+value+','+state)
+      // mesh has an order of values based on state
+      switch (state) {
+        case 3: // accumulate face values
+          if (obj['fvals'] === undefined) {
+            obj['fvals'] = []
+          }
+          obj['fvals'].push(parseFloat(value))
+          break
+        case 4: // accumulate edge values
+          if (obj['evals'] === undefined) {
+            obj['evals'] = []
+          }
+          obj['evals'].push(parseFloat(value))
+          break
+        default:
+          break
+      }
+    } else {
+      obj[getTLA(group)] = parseFloat(value)
+    }
+  }
+  reader.objstack.push(obj)
+}
+
+//
+// handle a string as provided by the reader
+// groups: 1,6,7,8,
+//
+function handleString (reader, group, value) {
+  // console.log('string: '+group+','+value)
+  let obj = reader.objstack.pop()
+  if ('type' in obj) {
+    obj[getTLA(group)] = value
+  }
+  reader.objstack.push(obj)
+}
+
+//
+// handle a name as provided by the reader
+// groups: 2,3
+//
+function handleName (reader, group, value) {
+  // console.log('name: '+group+','+value)
+  let obj = reader.objstack.pop()
+  if ('type' in obj) {
+    if (obj[getTLA(group)] === undefined) {
+      obj[getTLA(group)] = value
+    }
+  }
+  reader.objstack.push(obj)
+}
+
+//
+// Create a DXF reader using the given source and options.
+// This routine sets up a series of callbacks (absorb calls) to handle the various DXF groups, then starts the reader.
+// While reading, the callback routine (handle*) converts the value and then:
+// - pushes a new group onto the objstack
+// OR
+// - adds a new attribute to the current object
+//
+function createReader (src, options) {
+  // create a reader for the DXF
+  let reader = dxf.reader(options)
+
+  // setup event handling from the reader
+  reader.on('error', handleError)
+  reader.on('start', handleStart)
+  reader.on('end', handleEnd)
+
+  // setup group handling
+  reader.absorb(0, handleEntity)
+  reader.absorb(1, handleString)
+  reader.absorb(2, handleName)
+  reader.absorb(3, handleName)
+  reader.absorb(6, handleString)
+  reader.absorb(7, handleString)
+  reader.absorb(8, handleString)
+  reader.absorb(9, handleVariable)
+  reader.absorb(10, handleXcoord)
+  reader.absorb(11, handleDouble)
+  reader.absorb(12, handleDouble)
+  reader.absorb(13, handleDouble)
+  reader.absorb(20, handleYcoord)
+  reader.absorb(21, handleDouble)
+  reader.absorb(22, handleDouble)
+  reader.absorb(23, handleDouble)
+  reader.absorb(30, handleZcoord)
+  reader.absorb(31, handleDouble)
+  reader.absorb(32, handleDouble)
+  reader.absorb(33, handleDouble)
+  reader.absorb(39, handleDouble)
+  reader.absorb(40, handleDouble)
+  reader.absorb(41, handleDouble)
+  reader.absorb(42, handleBulge)
+  reader.absorb(50, handleDouble)
+  reader.absorb(51, handleDouble)
+  reader.absorb(62, handleInt)
+  reader.absorb(70, handleInt)
+  reader.absorb(71, handleInt)
+  reader.absorb(72, handleInt)
+  reader.absorb(73, handleInt)
+  reader.absorb(74, handleInt)
+  reader.absorb(75, handleInt)
+  reader.absorb(90, handleValue)
+  reader.absorb(91, handleLen) // MESH
+  reader.absorb(92, handleLen) // MESH
+  reader.absorb(93, handleLen) // MESH
+  reader.absorb(94, handleLen) // MESH
+  reader.absorb(95, handleLen) // MESH
+  reader.absorb(210, handleInt)
+  reader.absorb(220, handleInt)
+  reader.absorb(230, handleInt)
+
+  // initial state
+  reader.objstack = []
+  reader.objstack.push({type: 'dxf'})
+
+  // start the reader
+  reader.write(src).close()
+  return reader
+}
+
+//
+// instantiate the give DXF definition (src) into a set of CSG library objects
+//
+function instantiate (src, filename, options) {
+  let reader = createReader(src, options)
+  let objs = instantiateAsciiDxf(reader, options)
+  return objs
+}
+
+//
+// translate the give DXF definition (src) into a  JSCAD script
+//
+function translate (src, filename, options) {
+  let reader = createReader(src, options)
+
+  let code = `// Produced by JSCAD IO Library : DXF Deserialization (${options.version})
+
+`
+  // code += '// date: ' + (new Date()) + '\n'
+  // code += '// source: ' + filename + '\n'
+  code += translateAsciiDxf(reader, options)
+  return code
+}
+
+/**
+ * Deserialize the given source and return the requested 'output'
+ * @param {string} src DXF data stream
+ * @param {string} filename (optional) original filename of DXF data stream if any
+ * @param {object} options (optional) anonymous object with:
+ * @param {string} [options.version='0.0.1'] version number to add to the metadata
+ * @param {string} [options.output='jscad'] either jscad or csg to set desired output
+ * @param {boolean} [options.strict=true] obey strict DXF specifications
+ * @param {array} [options.colorindex=[]] list of colors (256) for use during rendering
+ * @return {string|[objects]} a string (jscad script) or array of objects
+ */
+const deserialize = function (src, filename, options) {
+  const defaults = {
+    version: '0.0.1',
+    output: 'jscad',
+    strict: true,
+    colorindex: colorIndex,
+    dxf: {
+      angdir: 0, // counter clockwise
+      insunits: 4, // millimeters
+      pfacevmax: 4, // number of vertices per face
+    }
+  }
+  options = Object.assign({}, defaults, options)
+  return options.output === 'jscad' ? translate(src, filename, options) : instantiate(src, filename, options)
+}
+
+module.exports = {
+  deserialize
+}
+
+},{"./DxfReader":78,"./autocad":79,"./instantiate":81,"./translate":82}],81:[function(require,module,exports){
+/*
+## License
+
+Copyright (c) 2017 Z3 Development https://github.com/z3dev
+
+All code released under MIT license
+
+*/
+const { CSG, CAG } = require('@jscad/csg')
+
+const {BYBLOCK, BYLAYER} = require('./autocad')
+
+//
+// instantiate the given object (3dface) as a polygon
+//
+function instantiatePolygon (obj, layers, options) {
+  let vertices = []
+  // FIXME: should check global variable to instantiate in the proper orientation
+  vertices.push(new CSG.Vertex(new CSG.Vector3D([obj['pptx'], obj['ppty'], obj['pptz']])))
+  vertices.push(new CSG.Vertex(new CSG.Vector3D([obj['sptx'], obj['spty'], obj['sptz']])))
+  vertices.push(new CSG.Vertex(new CSG.Vector3D([obj['tptx'], obj['tpty'], obj['tptz']])))
+  if (obj['fptx']) {
+    let pushit = false
+    if (obj['tptx'] !== obj['fptx']) { pushit = true }
+    if (obj['tpty'] !== obj['fpty']) { pushit = true }
+    if (obj['tptz'] !== obj['fptz']) { pushit = true }
+    if (pushit) {
+      vertices.push(new CSG.Vertex(new CSG.Vector3D([obj['fptx'], obj['fpty'], obj['fptz']])))
+    }
+  }
+  let cn = getColorNumber(obj, layers)
+  let shared = getColor(cn, options.colorindex)
+  return new CSG.Polygon(vertices, shared)
+}
+
+//
+// instantiate the given object (line) as CSG.Line2D or CSG.Line3D
+//
+function instantiateLine (obj, layers, options) {
+  let csg = null
+  if (obj['pptz'] === obj['sptz'] & obj['pptz'] === 0) {
+    let p1 = new CSG.Vector2D([obj['pptx'], obj['ppty']])
+    let p2 = new CSG.Vector2D([obj['sptx'], obj['spty']])
+    csg = CSG.Line2D.fromPoints(p1, p2)
+  } else {
+    let p1 = new CSG.Vector3D([obj['pptx'], obj['ppty'], obj['pptz']])
+    let p2 = new CSG.Vector3D([obj['sptx'], obj['spty'], obj['sptz']])
+    csg = CSG.Line3D.fromPoints(p1, p2)
+  }
+  return csg
+}
+
+//
+// instantiate the give object as CSG.Vector2D or CSG.Vector3D
+//
+function instantiateVector (obj) {
+  const d3line = parseInt('00000000000100000', 2)
+  const d3mesh = parseInt('00000000001000000', 2)
+  const d3face = parseInt('00000000010000000', 2)
+
+  let flags = obj['lflg']
+  let vtype = null
+  if ((flags & d3line) === d3line) {
+    vtype = new CSG.Vector3D([obj['pptx'], obj['ppty'], obj['pptz']])
+  } else
+  if ((flags & d3mesh) === d3mesh) {
+    vtype = new CSG.Vector3D([obj['pptx'], obj['ppty'], obj['pptz']])
+  } else
+  if ((flags & d3face) === d3face) {
+    vtype = new CSG.Vector3D([obj['pptx'], obj['ppty'], obj['pptz']])
+    // pass on face indexes
+    vtype['fvia'] = obj['fvia']
+    vtype['fvib'] = obj['fvib']
+    vtype['fvic'] = obj['fvic']
+    vtype['fvid'] = obj['fvid']
+  } else {
+    vtype = new CSG.Vector2D(obj['pptx'], obj['ppty'])
+    vtype['bulg'] = obj['bulg'] // for rendering curved sections
+  }
+  return vtype
+}
+
+//
+// append a section to the given path
+//
+function addSection (path, x1, y1, bulg) {
+  if (bulg === 0) {
+  // add straight line to the end of the path
+    path = path.appendPoint([x1, y1])
+  } else {
+  // add arc to the end of the path
+    let prev = path.points[path.points.length - 1]
+    let curr = new CSG.Vector2D(x1, y1)
+    let u = prev.distanceTo(curr)
+    let r = u * ((1 + Math.pow(bulg, 2)) / (4 * bulg))
+    let clockwise = (bulg < 0)
+    let large = false // FIXME how to determine?
+    let d = Math.atan(bulg) / (Math.PI / 180) * 4
+    // FIXME; add resolution
+    path = path.appendArc([x1, y1], {radius: r, xaxisrotation: d, clockwise: clockwise, large: large})
+  }
+  return path
+}
+
+//
+// instantiate the given object (lwpolyline) into a CSG.Path2D
+//
+function instantiatePath2D (obj, layers, options) {
+  const closed = parseInt('00000000000000001', 2)
+
+  // expected values
+  let  vlen = obj['vlen']
+  let pptxs = obj['pptxs']
+  let pptys = obj['pptys']
+  let bulgs = obj['bulgs']
+  let flags = obj['lflg']
+
+  // conversion
+  let path = new CSG.Path2D()
+  let isclosed = ((flags & closed) === closed)
+  if (vlen === pptxs.length && vlen === pptys.length && vlen === bulgs.length) {
+    pptxs.forEach(function (item, index, array) {
+      let bulg = 0
+      if (index > 0) {
+        bulg = bulgs[index - 1] // apply the previous bulg
+      }
+      path = addSection(path, pptxs[index], pptys[index], bulg)
+    })
+  } else {
+  // FIXME flag this DXF error
+    return path
+  }
+  // FIXME add optional to create CAG from the path
+  if (isclosed) {
+  // apply the last section between last and first points
+    path = addSection(path, pptxs[0], pptys[0], bulgs[vlen - 1])
+    path = path.close()
+    return CAG.fromPoints(path.points)
+  }
+  return path
+}
+
+//
+// instantiate the given object (arc) into CSG.Path2D or CSG??
+//
+function instantiateArc (obj, layers, options) {
+  // expected values
+  let lthk = obj['lthk']
+  let pptx = obj['pptx']
+  let ppty = obj['ppty']
+  // let pptz = obj['pptz']
+  let swid = obj['swid']
+  let ang0 = obj['ang0'] // start angle
+  let ang1 = obj['ang1'] // end angle
+  // FIXME need to determine resolution from object/layer/variables
+  let res = CSG.defaultResolution2D
+
+  // conversion
+  if (lthk === 0.0) {
+    // convert to 2D object
+    return CSG.Path2D.arc({center: [pptx, ppty], radius: swid, startangle: ang0, endangle: ang1, resolution: res})
+  }
+  // FIXME how to represent 3D arc?
+  return CSG.Path2D.arc({center: [pptx, ppty], radius: swid, startangle: ang0, endangle: ang1, resolution: res})
+}
+
+//
+// instantiate the given object (circle) into CAG.circle (or extrude to CSG)
+//
+function instantiateCircle (obj, layers, options) {
+  // expected values
+  let lthk = obj['lthk']
+  let pptx = obj['pptx']
+  let ppty = obj['ppty']
+  // let pptz = obj['pptz']
+  let swid = obj['swid']
+
+  // conversion
+  // FIXME add color when supported
+  // let cn = getColorNumber(obj,layers)
+  // let shared = getColor(cn,options.colorindex)
+  // FIXME need to determine resolution from object/layer/variables
+  let res = CSG.defaultResolution2D
+
+  // convert to 2D object
+  if (lthk === 0.0) {
+    let cag = CAG.circle({center: [pptx, ppty], radius: swid, resolution: res})
+    return cag
+  }
+  // convert to 3D object
+  let cag = CAG.circle({center: [pptx, ppty], radius: swid, resolution: res})
+  let csg = cag.extrude({offset: [0, 0, lthk]})
+  // FIXME need to use 210/220/230 for direction of extrusion
+  return csg
+}
+
+//
+// instantiate the give object (ellipse) into CAG.ellipse (or extrude to CSG)
+//
+function instantiateEllipse (obj, layers, options) {
+  // expected values
+  let pptx = obj['pptx'] // center point
+  let ppty = obj['ppty']
+  let pptz = obj['pptz']
+  let sptx = obj['sptx'] // MAJOR axis point (about center point)
+  let spty = obj['spty']
+  let sptz = obj['sptz']
+  let swid = obj['swid'] // Ratio of minor axis to major axis
+  // FIXME need to determine resolution from object/layer/variables
+  let res = CSG.defaultResolution2D
+
+  // convert to 2D object
+  if (pptz === 0.0 && sptz === 0.0) {
+    let center = new CSG.Vector2D(0, 0)
+    let mjaxis = new CSG.Vector2D(sptx, spty)
+    let rx = center.distanceTo(mjaxis)
+    let ry = rx * swid
+    let angle = Math.atan2(spty, sptx) * 180 / Math.PI
+    if (angle < CSG.EPS) angle = 0
+    // FIXME add start and end angle when supported
+    let cag = CAG.ellipse({center: [0,0], radius: [rx, ry], resolution: res}).rotateZ(angle).translate([pptx,ppty])
+    return cag
+  }
+  // convert to 3D object
+}
+
+function createEdges (vlen, faces) {
+  let edges = []
+  while (vlen > 0) {
+    edges.push([])
+    vlen--
+  }
+  let mod3 = Math.floor(faces.length / 3) * 3
+  if (mod3 === faces.length) {
+    let fi = 0
+    while (fi < faces.length) {
+      let v1 = faces[fi++]
+      let v2 = faces[fi++]
+      let v3 = faces[fi++]
+      if (v1 === v2 || v1 === v3 || v2 === v3) continue
+
+      let edge = edges[v1]
+      if (edge.indexOf(v2) < 0) { edge.push(v2) }
+      if (edge.indexOf(v3) < 0) { edge.push(v3) }
+
+      edge = edges[v2]
+      if (edge.indexOf(v3) < 0) { edge.push(v3) }
+      if (edge.indexOf(v1) < 0) { edge.push(v1) }
+
+      edge = edges[v3]
+      if (edge.indexOf(v1) < 0) { edge.push(v1) }
+      if (edge.indexOf(v2) < 0) { edge.push(v2) }
+    }
+  }
+  return edges
+}
+
+function createFaces (edgesByVertex) {
+  let v1 = edgesByVertex.length
+  let faces = []
+  while (v1 > 0) {
+    v1--
+    let v1edges = edgesByVertex[v1]
+    let e1i = v1edges.length
+    while (e1i > 0) {
+      e1i--
+      let v2 = v1edges[e1i]
+      let v2edges = edgesByVertex[v2]
+      // search for common vertexes
+      let e2i = v2edges.length
+      while (e2i > 0) {
+        e2i--
+        let v3 = v2edges[e2i]
+        if (v1edges.indexOf(v3) < 0) continue
+        faces.push([v1, v2, v3])
+      }
+    }
+  }
+  return faces
+}
+
+function instantiateFaces (fvals) {
+  let faces = []
+  let vi = 0
+  while (vi < fvals.length) {
+    let fi = fvals[vi++]
+    let face = []
+    while (fi > 0) {
+      face.push(fvals[vi++])
+      fi--
+    }
+    faces.push(face)
+  }
+  return faces
+}
+
+function instantiatePoints (pptxs, pptys, pptzs) {
+  let points = []
+  let vi = 0
+  while (vi < pptxs.length) {
+    let x = pptxs[vi]
+    let y = pptys[vi]
+    let z = pptzs[vi]
+    points.push([x, y, z])
+    vi++
+  }
+  return points
+}
+
+//
+// instantiate the given object (mesh) into a CSG
+//
+// Note: See Face-Vertex meshes on Wikipedia
+//
+function instantiateMesh (obj, layers, options) {
+  // expected values
+  let  vlen = obj['vlen']
+  let pptxs = obj['pptxs'] // vertices
+  let pptys = obj['pptys']
+  let pptzs = obj['pptzs']
+
+  let flen = obj['flen']
+  let fvals = obj['fvals'] // faces
+
+  // conversion
+  let cn = getColorNumber(obj, layers)
+  let shared = getColor(cn, options.colorindex)
+
+  CSG._CSGDEBUG = false
+
+  let polygons = []
+  if (vlen === pptxs.length && vlen === pptys.length && vlen === pptzs.length) {
+    if (flen === fvals.length) {
+      let faces = instantiateFaces(fvals)
+      let points = instantiatePoints(pptxs, pptys, pptzs)
+
+      let fi = 0
+      while (fi < faces.length) {
+        let face = faces[fi]
+        let vectors = []
+        let vertices = [] // did i hear someone say REDUNDANCY
+        let vi = 0
+        while (vi < face.length) {
+          let pi = face[vi]
+          let vector = new CSG.Vector3D(points[pi])
+          vectors.push(vector)
+          let vertex = new CSG.Vertex(vector)
+          vertices.push(vertex)
+          vi++
+        }
+        if (options.dxf.angdir === 1) {
+          vertices = vertices.reverse()
+        }
+        // FIXME how to correct bad normals?
+
+        let poly = new CSG.Polygon(vertices, shared)
+        polygons.push(poly)
+
+        fi++
+      }
+    } else {
+      // invalid flen
+    }
+  } else {
+    // invalid vlen
+  }
+  return CSG.fromPolygons(polygons)
+}
+
+//
+// find the layer referenced by the given object
+//
+function findLayer (obj, layers) {
+  let lname = obj['lnam'] || '0'
+  for (let layer of layers) {
+    if (layer['name'] === lname) {
+      return layer
+    }
+  }
+  return null
+}
+
+//
+// get the color number of the object, possibly looking at layer
+// returns -1 if a color number was not found
+//
+function getColorNumber (obj, layers) {
+  let cn = obj['cnmb'] || -1
+  if (cn === BYLAYER) {
+  // use the color number from the layer
+    cn = -1
+    let layer = findLayer(obj, layers)
+    if (layer !== null) {
+      cn = layer['cnmb'] || -1
+    }
+  } else
+  if (cn === BYBLOCK) {
+  // use the color number from the block
+    cn = -1
+  }
+  return cn
+}
+
+function mod (num, mod) {
+  let remain = num % mod
+  return Math.floor(remain >= 0 ? remain : remain + mod)
+}
+
+//
+// instantiate Polygon.Shared(color) using the given index into the given color index
+//
+function getColor (index, colorindex) {
+  if (index < 0) { return null }
+
+  index = mod(index, colorindex.length)
+  let rgba = colorindex[index]
+  // FIXME : colors should be cached and shared
+  return new CSG.Polygon.Shared(rgba)
+}
+
+// works for both POLYLINE
+function getPolyType (obj) {
+  const closed = parseInt('00000000000000001', 2)
+  const d3line = parseInt('00000000000001000', 2)
+  const d3mesh = parseInt('00000000000010000', 2)
+
+  let flags = obj['lflg']
+  let ptype = null
+  if ((flags & d3line) === d3line) {
+    ptype = null // FIXME what to do?
+  } else
+  if ((flags & d3mesh) === d3mesh) {
+    ptype = new CSG()
+  } else {
+    let isclosed = ((flags & closed) === closed)
+    ptype = new CSG.Path2D([], isclosed)
+  }
+  return ptype
+}
+
+//
+// complete a complex object from the given base object and parts
+// - a series of 3dfaces => polygons => CSG
+// - a series of vertex => vectors => Path2D
+//
+function completeCurrent (objects, baseobj, polygons, vectors, options) {
+  if (baseobj instanceof CSG.Path2D) {
+    // console.log('##### completing Path2D')
+    objects.push(new CSG.Path2D(vectors, baseobj.closed))
+  }
+  if (baseobj instanceof CSG) {
+    // console.log('##### completing CSG')
+    objects.push(CSG.fromPolygons(polygons))
+  }
+  return null
+}
+
+const instantiateAsciiDxf = function (reader, options) {
+  // console.log('**************************************************')
+  // console.log(JSON.stringify(reader.objstack));
+  // console.log('**************************************************')
+
+  let   layers = [] // list of layers with various information like color
+  let  current = null // the object being created
+  let polygons = [] // the list of 3D polygons
+  let  objects = [] // the list of objects instantiated
+  let  vectors = [] // the list of vectors for paths or meshes
+
+  let p = null
+  for (let obj of reader.objstack) {
+    p = null
+
+    if (!('type' in obj)) {
+      // console.log('##### skip')
+      continue
+    }
+    // console.log(JSON.stringify(obj));
+
+    switch (obj.type) {
+    // control objects
+      case 'dxf':
+        break
+      case 'layer':
+        // console.log('##### layer')
+        current = completeCurrent(objects, current, polygons, vectors, options)
+        layers.push(obj)
+        break
+      case 'variable':
+        current = completeCurrent(objects, current, polygons, vectors, options)
+        break
+
+      // 3D entities
+      case '3dface':
+        // console.log('##### 3dface')
+        p = instantiatePolygon(obj, layers, options)
+        if (current === null) {
+          // console.log('##### start of 3dfaces CSG')
+          current = new CSG()
+        }
+        break
+      case 'mesh':
+        // console.log('##### mesh')
+        current = completeCurrent(objects, current, polygons, vectors, options)
+        objects.push(instantiateMesh(obj, layers, options))
+        break
+
+      // 2D or 3D entities
+      case 'arc':
+        // console.log('##### arc')
+        current = completeCurrent(objects, current, polygons, vectors, options)
+        objects.push(instantiateArc(obj, layers, options))
+        break
+      case 'circle':
+        // console.log('##### circle')
+        current = completeCurrent(objects, current, polygons, vectors, options)
+        objects.push(instantiateCircle(obj, layers, options))
+        break
+      case 'ellipse':
+        // console.log('##### ellipse')
+        current = completeCurrent(objects, current, polygons, vectors, options)
+        objects.push(instantiateEllipse(obj, layers, options))
+        break
+      case 'line':
+        // console.log('##### line')
+        current = completeCurrent(objects, current, polygons, vectors, options)
+        objects.push(instantiateLine(obj, layers, options))
+        break
+      case 'polyline':
+        if (current === null) {
+          // console.log('##### start of polyline')
+          current = getPolyType(obj)
+        }
+        break
+      case 'vertex':
+        // console.log('##### vertex')
+        p = instantiateVector(obj)
+        break
+      case 'seqend':
+        current = completeCurrent(objects, current, polygons, vectors, options)
+        break
+
+      // 2D entities
+      case 'lwpolyline':
+        // console.log('##### lwpolyline')
+        current = completeCurrent(objects, current, polygons, vectors, options)
+        objects.push(instantiatePath2D(obj, layers, options))
+        break
+
+      default:
+        // console.log('##### ERROR')
+        // console.log(obj.type)
+        break
+    }
+    // accumlate polygons if necessary
+    if (p instanceof CSG.Polygon) {
+      polygons.push(p)
+    }
+    // accumlate vectors if necessary
+    if (p instanceof CSG.Vector3D) {
+      vectors.push(p)
+    }
+    if (p instanceof CSG.Vector2D) {
+      vectors.push(p)
+    }
+  }
+  // instantiate the last object if necessary
+  current = completeCurrent(objects, current, polygons, vectors, options)
+
+  // debug output
+  // console.log('**************************************************')
+  // objects.forEach(
+  //   function(e) {
+  //     console.log(JSON.stringify(e));
+  //   }
+  // );
+  // console.log('**************************************************')
+  return objects
+}
+
+module.exports = {
+  instantiatePolygon,
+  instantiateVector,
+  instantiateAsciiDxf
+}
+
+},{"./autocad":79,"@jscad/csg":18}],82:[function(require,module,exports){
+/*
+## License
+
+Copyright (c) 2017 Z3 Development https://github.com/z3dev
+
+All code released under MIT license
+
+*/
+const { CSG } = require('@jscad/csg')
+
+const {BYBLOCK, BYLAYER} = require('./autocad')
+const {instantiatePolygon, instantiateVector} = require('./instantiate')
+
+//
+// helper function to simplify code
+//
+function createVertex(vector) {
+  return new CSG.Vertex(vector)
+}
+
+//
+// translate the give 2D vector to JSCAD script
+//
+function translateVector2D (vector) {
+  let script = `new CSG.Vector2D(${vector.x},${vector.y})`
+  return script
+}
+
+//
+// translate the give 3D vector to JSCAD script
+//
+function translateVector3D (vector) {
+  let script = `${vector.x},${vector.y},${vector.z}`
+  return script
+}
+
+//
+// translate the given CSG.Polygon into JSCAD script
+//
+function translatePolygon (polygon) {
+  let script = 'createPolygon(['
+  for (let vertex of polygon.vertices) {
+    script += `${translateVertex(vertex)},`
+  }
+  script += `],${translateShared(polygon.shared)},${translatePlane(polygon.plane)})`
+  return script
+}
+
+//
+// translate the given CSG.Plane to JSCAD script
+//
+function translatePlane (plane) {
+  let script = `[${translateVector3D(plane.normal)},${plane.w}]`
+  return script
+}
+
+//
+// translate the given CSG.Polygon.Shared to JSCAD script
+//
+function translateShared (shared) {
+  let script = 'null'
+  if (shared !== null && shared.color !== null) {
+    let rgb = shared.color
+    script = `[${rgb[0]},${rgb[1]},${rgb[2]},${rgb[3]}]`
+  }
+  return script
+}
+
+//
+// translate the given CSG.Vertex to JSCAD script
+//
+function translateVertex (vertex) {
+  let script = `[${translateVector3D(vertex.pos)}]`
+  return script
+}
+
+//
+// translate the given DXF object (line) into 2D or 3D line
+//
+function translateLine (obj, layers, options) {
+  let name = obj['name']
+  let script = ''
+  if (obj['pptz'] === obj['sptz'] & obj['pptz'] === 0) {
+    let p1 = new CSG.Vector2D([obj['pptx'], obj['ppty']])
+    let p2 = new CSG.Vector2D([obj['sptx'], obj['spty']])
+    script = `  let ${name} = CSG.Line2D.fromPoints(${translateVector2D(p1)},${translateVector2D(p2)})
+`
+  } else {
+    let p1 = new CSG.Vector3D([obj['pptx'], obj['ppty'], obj['pptz']])
+    let p2 = new CSG.Vector3D([obj['sptx'], obj['spty'], obj['sptz']])
+    script = `  let ${name} = CSG.Line3D.fromPoints(${translateVector3D(p1)},${translateVector3D(p2)})
+`
+  }
+  obj['script'] = script
+  addToLayer(obj, layers)
+}
+
+//
+// append a Path section to the given script
+//
+function translateSection (script, x1, y1, bulg, px, py) {
+  if (bulg === 0) {
+  // add straight line to the end of the path
+    script += `.appendPoint( [${x1},${y1}] )`
+  } else {
+  // add arc to the end of the path
+    let prev = new CSG.Vector2D(px, py)
+    let curr = new CSG.Vector2D(x1, y1)
+    let u = prev.distanceTo(curr)
+    let r = u * ((1 + Math.pow(bulg, 2)) / (4 * bulg))
+    let clockwise = (bulg < 0)
+    let large = false // FIXME how to determine?
+    let d = Math.atan(bulg) / (Math.PI / 180) * 4
+    // FIXME need to determine resolution from object/layer/variables
+    let res = CSG.defaultResolution2D
+    script += `.appendArc([${x1},${y1}],{radius: ${r},xaxisrotation: ${d},clockwise: ${clockwise},large: ${large},resolution: ${res}})`
+  }
+  return script
+}
+
+//
+// translate the given obj (lwpolyline) into a CSG.Path2D
+//
+function translatePath2D (obj, layers, options) {
+  const closed = parseInt('00000000000000001', 2)
+
+  // expected values
+  let  vlen = obj['vlen']
+  let pptxs = obj['pptxs']
+  let pptys = obj['pptys']
+  let bulgs = obj['bulgs']
+  let flags = obj['lflg']
+  let  name = obj['name']
+
+  // translation
+  let script = `  let ${name} = new CSG.Path2D()
+`
+  let isclosed = ((flags & closed) === closed)
+  if (vlen === pptxs.length && vlen === pptys.length && vlen === bulgs.length) {
+    script += `  ${name} = ${name}` // sections appended below
+    pptxs.forEach(function (item, index, array) {
+      let bulg = 0
+      let px = 0
+      let py = 0
+      if (index > 0) {
+        bulg = bulgs[index - 1] // apply the previous bulg
+        px = pptxs[index - 1]
+        py = pptys[index - 1]
+      }
+      script = translateSection(script, pptxs[index], pptys[index], bulg, px, py)
+    })
+  } else {
+  // FIXME flag this DXF error
+    return
+  }
+  // FIXME add optional to create CAG from the path
+  if (isclosed) {
+  // apply the last section between last and first points
+    let bulg = bulgs[vlen - 1] // apply the previous bulg
+    let px = pptxs[vlen - 1]
+    let py = pptys[vlen - 1]
+    script = translateSection(script, pptxs[0], pptys[0], bulg, px, py)
+    script += `
+  ${name} = ${name}.close()
+  ${name} = CAG.fromPoints(${name}.points)
+`
+  } else {
+    script += '\n'
+  }
+  obj['script'] = script
+  addToLayer(obj, layers)
+}
+
+//
+// translate the given object (arc) into CAG.Path2D or CSG??
+//
+function translateArc (obj, layers, options) {
+// expected values
+  let lthk = obj['lthk']
+  let pptx = obj['pptx']
+  let ppty = obj['ppty']
+  let pptz = obj['pptz']
+  let swid = obj['swid']
+  let ang0 = obj['ang0'] // start angle
+  let ang1 = obj['ang1'] // end angle
+  let name = obj['name']
+
+  // convert to 2D object
+  if (lthk === 0.0) {
+  // FIXME need to determine resolution from object/layer/variables
+    let res = CSG.defaultResolution2D
+    let script = `  let ${name} = CSG.Path2D.arc({center: [${pptx},${ppty}],radius: ${swid},startangle: ${ang0},endangle: ${ang1}, resolution: ${res}})
+`
+    obj['script'] = script
+    addToLayer(obj, layers)
+    return
+  }
+  // FIXME how to represent 3D arc?
+}
+
+//
+// translate the given obj (circle) into CAG.circle (or extrude to CSG)
+//
+function translateCircle (obj, layers, options) {
+// expected values
+  let lthk = obj['lthk']
+  let pptx = obj['pptx']
+  let ppty = obj['ppty']
+  let pptz = obj['pptz']
+  let swid = obj['swid']
+  let name = obj['name']
+
+  // FIXME add color when supported
+  // let cn = getColorNumber(obj,layers)
+  // let shared = getColor(cn,options.colorindex)
+  // FIXME need to determine resolution from object/layer/variables
+  let res = CSG.defaultResolution2D
+
+  // convert to 2D object
+  if (lthk === 0.0) {
+    let script = `  let ${name} = CAG.circle({center: [${pptx},${ppty}],radius: ${swid},resolution: ${res}})
+`
+    obj['script'] = script
+    addToLayer(obj, layers)
+    return
+  }
+
+  // convert to 3D object
+  let script = `  let ${name} = CAG.circle({center: [${pptx},${ppty}],radius: ${swid},resolution: ${res}).extrude({offset: [0,0,${lthk}]})
+`
+  // FIXME need to use 210/220/230 for direction of rotation
+  obj['script'] = script
+  addToLayer(obj, layers)
+}
+
+//
+// translate the given object (ellipse) into CAG.ellipse or CSG??
+//
+function translateEllipse (obj, layers, options) {
+// expected values
+  let pptx = obj['pptx'] // center point
+  let ppty = obj['ppty']
+  let pptz = obj['pptz']
+  let sptx = obj['sptx'] // MAJOR axis point (about center point)
+  let spty = obj['spty']
+  let sptz = obj['sptz']
+  let swid = obj['swid'] // Ratio of minor axis to major axis
+  let name = obj['name']
+  // FIXME need to determine resolution from object/layer/variables
+  let res = CSG.defaultResolution2D
+
+  // convert to 2D object
+  if (pptz === 0.0 && sptz === 0.0) {
+    let center = new CSG.Vector2D(0, 0)
+    let mjaxis = new CSG.Vector2D(sptx, spty)
+    let rx = center.distanceTo(mjaxis)
+    let ry = rx * swid
+    let angle = Math.atan2(spty, sptx) * 180 / Math.PI
+    if (angle < CSG.EPS) angle = 0
+    // FIXME add start and end angle when supported
+    let script = `  let ${name} = CAG.ellipse({center: [0,0],radius: [${rx},${ry}],resolution: ${res}}).rotateZ(${angle}).translate([${pptx},${ppty}])
+`
+    obj['script'] = script
+    addToLayer(obj, layers)
+    return
+  }
+  // convert to 3D object
+}
+
+function instantiateFaces (fvals) {
+  let faces = []
+  let vi = 0
+  while (vi < fvals.length) {
+    let fi = fvals[vi++]
+    let face = []
+    while (fi > 0) {
+      face.push(fvals[vi++])
+      fi--
+    }
+    faces.push(face)
+  }
+  return faces
+}
+
+function instantiatePoints (pptxs, pptys, pptzs) {
+  let points = []
+  let vi = 0
+  while (vi < pptxs.length) {
+    let x = pptxs[vi]
+    let y = pptys[vi]
+    let z = pptzs[vi]
+    points.push([x, y, z])
+    vi++
+  }
+  return points
+}
+
+//
+// instantiate the MESH as an CSG object, consisting of the polygons given
+//
+// Note: See Face-Vertex meshes on Wikipedia
+//
+function translateMesh (obj, layers, options) {
+// expected values
+  let vlen = obj['vlen']
+  let pptxs = obj['pptxs'] // vertices
+  let pptys = obj['pptys']
+  let pptzs = obj['pptzs']
+
+  let flen = obj['flen']
+  let fvals = obj['fvals'] // faces
+
+  // conversion
+  let cn = getColorNumber(obj, layers)
+  let shared = getColor(cn, options.colorindex)
+
+  CSG._CSGDEBUG = false
+
+  let polygons = []
+  if (vlen === pptxs.length && vlen === pptys.length && vlen === pptzs.length) {
+    if (flen === fvals.length) {
+      let faces = instantiateFaces(fvals)
+      let points = instantiatePoints(pptxs, pptys, pptzs)
+
+      let fi = 0
+      while (fi < faces.length) {
+        let face = faces[fi]
+        let vectors = []
+        let vertices = [] // did i hear someone say REDUNDANCY
+        let vi = 0
+        while (vi < face.length) {
+          let pi = face[vi]
+          let vector = new CSG.Vector3D(points[pi])
+          vectors.push(vector)
+          let vertex = createVertex(vector)
+          vertices.push(vertex)
+          vi++
+        }
+        if (options.dxf.angdir === 1) {
+          vertices = vertices.reverse()
+        }
+        // FIXME how to correct bad normals?
+
+        let poly = new CSG.Polygon(vertices, shared)
+        polygons.push(poly)
+
+        fi++
+      }
+    } else {
+    }
+  } else {
+  // invalid vlen
+  }
+  // convert the polygons into a script
+  let name = obj['name']
+  let script = `  const ${name}_polygons = [
+`
+  for (let polygon of polygons) {
+    script += '    ' + translatePolygon(polygon) + ',\n'
+  }
+  script += `  ]
+  let ${name} = CSG.fromPolygons(${name}_polygons)
+`
+  obj['script'] = script
+  addToLayer(obj, layers)
+  return null
+}
+
+function findLayer (obj, layers) {
+  let lname = obj['lnam'] || '0'
+
+  // lookup the layer associated with the object
+  for (let layer of layers) {
+    if (layer['name'] === lname) {
+      return layer
+    }
+  }
+  return null
+}
+
+function findLayer0 (layers) {
+  for (let layer of layers) {
+    if (layer['name'] === '0') {
+      return layer
+    }
+  }
+  // this DXF did not specify so create
+  let layer = {type: 'layer'}
+  layer['lnam'] = 'layer0'
+  layer['name'] = '0'
+  layer['lscl'] = 1.0
+  layer['visb'] = 0
+  layer['spac'] = 0
+  layer['objects'] = []
+
+  layers.push(layer)
+  return layer
+}
+
+function addToLayer (obj, layers) {
+  let layer = findLayer(obj, layers)
+  if (layer === null) {
+    // hmmm... add to layer '0'
+    layer = findLayer0(layers)
+  }
+  if (!('objects' in layer)) {
+    layer['objects'] = []
+  }
+  layer['objects'].push(obj)
+}
+
+//
+// get the color number of the object, possibly looking at layer
+// returns -1 if a color number was not found
+//
+function getColorNumber (obj, layers) {
+  let cn = obj['cnmb'] || -1
+  if (cn === BYLAYER) {
+    // use the color number from the layer
+    cn = -1
+    let layer = findLayer(obj, layers)
+    if (layer !== null) {
+      cn = layer['cnmb'] || -1
+    }
+  } else
+  if (cn === BYBLOCK) {
+    // use the color number from the block
+  }
+  return cn
+}
+
+function mod (num, mod) {
+  let remain = num % mod
+  return Math.floor(remain >= 0 ? remain : remain + mod)
+}
+
+//
+// instantiate Polygon.Shared(color) using the given index into the given color index
+// Note: 0 > index <= length of colorindex
+function getColor (index, colorindex) {
+  if (index < 1) { return null }
+
+  index = mod(index, colorindex.length)
+  let rgba = colorindex[index-1]
+  return new CSG.Polygon.Shared.fromColor([rgba[0]/255,rgba[1]/255,rgba[2]/255,rgba[3]/255])
+}
+
+//
+// get the (internal) object type from the given object
+//
+// This assumes the given object is a POLYLINE.
+// DXF POLYLINE entities are over-loaded objects with various shapes.
+// - 2D line, with following 2D VERTEX entities
+// - 3D line, with following 3D VERTEX entities
+// - 3D polymesh, with following 3D VERTEX entities
+// - 3D polyface, with following 3D VERTEX entities
+//
+function getPolyType (obj) {
+  const closedM = parseInt('00000000000000001', 2)
+  const  d3line = parseInt('00000000000001000', 2)
+  const  d3mesh = parseInt('00000000000010000', 2)
+  const closedN = parseInt('00000000000100000', 2)
+  const  d3face = parseInt('00000000001000000', 2)
+
+  let flags = obj['lflg']
+  let ptype = null
+  if ((flags & d3line) === d3line) {
+    let isclosed = ((flags & closedM) === closedM)
+    ptype = {type: '3dline',isclosed: isclosed}
+  } else
+  if ((flags & d3mesh) === d3mesh) {
+    ptype = {type: '3dpolymesh'}
+    // need the mesh shape for interpretation
+    ptype['fvia'] = obj['fvia']
+    ptype['fvib'] = obj['fvib']
+    let closed = ((flags & closedM) === closedM)
+    ptype.closedM = closed
+    closed = ((flags & closedN) === closedN)
+    ptype.closedN = closed
+  } else
+  if ((flags & d3face) === d3face) {
+    ptype = {type: '3dpolyfaces'}
+    // need the vertex and face counts for interpretation
+    ptype['fvia'] = obj['fvia']
+    ptype['fvib'] = obj['fvib']
+  } else {
+    let isclosed = ((flags & closedM) === closedM)
+    ptype = {type: '2dline',isclosed: isclosed}
+  }
+  if ('cnmb' in obj) { ptype['cnmb'] = obj['cnmb'] }
+  if ('lnam' in obj) { ptype['lnam'] = obj['lnam'] }
+  return ptype
+}
+
+//
+// Instantiate the facets of the POLYLINE poly-mesh as a set of polygons.
+//
+// DXF POLYLINE entities can contain a mesh defined by a MxN set of vertices.
+// The mesh is defined in terms of a matrix of M and N vertices, like a grid consisting of columns and rows.
+// M and N specify the column and row position, respectively, of any given vertex.
+// The mesh is constructed row by row; M rows which contain N vertexes.
+//
+function instantiateFacets (meshM, meshN, vectors, shared, options) {
+  // console.log('##### instantiateFacets('+meshM+','+meshN+')')
+
+  function getVector (x, y) {
+    let n = (((x - 1) * meshN) + (y - 1))
+    return vectors[n]
+  }
+
+  let facets = []
+
+  // sanity check
+  let fcount = meshM * meshN
+  if (fcount !== vectors.length) {
+    return facets
+  }
+  if (meshM < 2 | meshN < 2) {
+    return facets
+  }
+  // instantiate VALID polygons
+  let i = 1
+  while (i < meshM) {
+    let j = 1
+    while (j < meshN) {
+      let v0 = createVertex(getVector(i, j))
+      let v1 = createVertex(getVector(i + 1, j))
+      let v2 = createVertex(getVector(i + 1, j + 1))
+      let v3 = createVertex(getVector(i, j + 1)) // CCW vectors
+      let facet = [v0, v1, v2, v3]
+      if (options.dxf.angdir === 1) {
+        facet = facet.reverse()
+      }
+      let polygon = new CSG.Polygon(facet, shared)
+      if (Number.isFinite(polygon.plane.w)) {
+        facets.push(polygon)
+      }
+      j++
+    }
+    i++
+  }
+  return facets
+}
+
+//
+// Instantiate the faces of the POLYLINE face-mesh as a set of polygons.
+//
+// DXF POLYLINE entities can contain a face mesh defined by a series of vertices.
+// The first part of the series are the (meshM) vertices.
+// The second part of the series are the (meshN) faces.
+// Each face of the mesh is defined by the indexes provided by the face (group codes 71-74).
+// The first zero(0) index marks the end of the vertices.
+// Negative indexes indicate invisible edges (not implemented).
+//
+function instantiatePolyFaces (meshM, meshN, vectors, shared, options) {
+  // console.log('##### instantiatePolyFaces('+meshM+','+meshN+')')
+  let faces = []
+
+  // sanity check
+  if ((meshM + meshN) !== vectors.length) {
+    return faces
+  }
+  // conversion
+  let i = meshM // skip to the faces
+  while (i < vectors.length) {
+    let face = vectors[i]
+    let indexes = [Math.abs(face['fvia']),Math.abs(face['fvib']),Math.abs(face['fvic']),Math.abs(face['fvid'])]
+    let vertices = []
+    if (indexes[0] > 0) {
+      vertices.push(createVertex(vectors[indexes[0] - 1]))
+      if (indexes[1] > 0) {
+        vertices.push(createVertex(vectors[indexes[1] - 1]))
+        if (indexes[2] > 0) {
+          vertices.push(createVertex(vectors[indexes[2] - 1]))
+          if (indexes[3] > 0) {
+            vertices.push(createVertex(vectors[indexes[3] - 1]))
+          }
+        }
+      }
+    }
+    // only use valid face definitions
+    if (vertices.length > 2) {
+      // reverse the order of vertices if necessary
+      if (options.dxf.angdir === 1) {
+        vertices = vertices.reverse()
+      }
+      faces.push(new CSG.Polygon(vertices, shared))
+    }
+    i++
+  }
+  return faces
+}
+
+//
+// Translate a 2D line from the given base object and parts.
+// The translation uses the parts as 2D vertexes from POLYLINE.
+//
+function translateAs2Dline(obj, layers, parts, options) {
+  // console.log('##### completing Path2D using vectors')
+  // convert the parts to a series of X/Y/BULG lists
+  obj['vlen'] = parts.length
+  obj['pptxs'] = []
+  obj['pptys'] = []
+  obj['bulgs'] = []
+  for (let vector of parts) {
+    obj['pptxs'].push(vector.x)
+    obj['pptys'].push(vector.y)
+    obj['bulgs'].push(vector['bulg'])
+  }
+  if (obj.closed) {
+    obj['lflg'] = parseInt('00000000000000001', 2)
+  } else {
+    obj['lflg'] = 0
+  }
+  translatePath2D(obj, layers, options)
+  return null
+}
+
+//
+// translate a complex object from the given base object and parts
+// - CSG plus a series of polygons => CSG
+// - Path2D plus a series of 2D vectors => Path2D
+// - CSG plus a series of 3D vectors => CSG
+//
+function translateCurrent (obj, layers, parts, options) {
+  if (obj === null) return null
+
+  let type = obj.type
+  // console.log('##### translating Current as '+type)
+  if (type === '2dline') {
+    return translateAs2Dline(obj, layers, parts, options)
+  }
+
+  if (type === '3dline') {
+    // FIXME what to do?
+    return null
+  }
+
+  if (type === '3dpolymesh') {
+    let m = obj['fvia']
+    let n = obj['fvib']
+    let i = parts.length
+    // console.log('##### m: '+m+' n: '+n+' i: '+i)
+    let cn = getColorNumber(obj, layers)
+    let shared = getColor(cn, options.colorindex)
+    let facets = instantiateFacets(m, n, parts, shared, options)
+    parts = facets
+    // fall through, translating the parts (polygons)
+  }
+
+  if (type === '3dpolyfaces') {
+    if ('fvia' in obj) {
+      let m = obj['fvia']
+      let n = obj['fvib']
+      let cn = getColorNumber(obj, layers)
+      let shared = getColor(cn, options.colorindex)
+      let faces = instantiatePolyFaces(m, n, parts, shared, options)
+      parts = faces
+      // fall through, translating the parts (polygons)
+    }
+  }
+  // convert the polygons into a script
+  let name = obj['name']
+  let script = `  const ${name}_polygons = [
+`
+  for (let polygon of parts) {
+    script += '    ' + translatePolygon(polygon) + ',\n'
+  }
+  script += `  ]
+  let ${name} = CSG.fromPolygons(${name}_polygons)
+`
+  obj['script'] = script
+  addToLayer(obj, layers)
+  return null
+}
+
+//
+// translate the given layer into a wrapper function for the previous translated objects
+//
+function translateLayer (layer) {
+  let name = layer['lnam'] || 'Unknown'
+
+  let script = `function ${name}() {
+`
+  for (let object of layer['objects']) {
+    script += object['script']
+  }
+  script += '  return ['
+  for (let object of layer['objects']) {
+    script += object['name'] + ','
+  }
+  script += ']\n}\n'
+  return script
+}
+
+function saveVariable (obj, options) {
+  let name = obj['name'] || 'Unknown'
+
+  switch (name) {
+    case '$ANGDIR':
+      if ('lflg' in obj) {
+        options.dxf.angdir = obj['lflg']
+      }
+      break
+
+    default:
+      break
+  }
+}
+
+const translateAsciiDxf = function (reader, options) {
+  // console.log('**************************************************')
+  // console.log(JSON.stringify(reader.objstack))
+  // console.log('**************************************************')
+
+  let  layers = [] // list of layers with various information like color
+  let current = null // the object being created
+  let   parts = [] // the list of object subparts (polygons or vectors)
+  let objects = [] // the list of objects translated
+  let numobjs = 0
+
+  findLayer0(layers)
+
+  let p = null
+  for (let obj of reader.objstack) {
+    p = null
+
+    if (!('type' in obj)) {
+      // console.log('##### skip')
+      continue
+    }
+    if (!('name' in obj)) {
+      obj['name'] = 'jscad' + numobjs
+      numobjs = numobjs + 1
+    } else {
+      // UGG... javascript variable names
+      name = obj['name']
+      name = name.replace(/ /g,'_')
+      name = name.replace(/-/g,'_')
+      name = name.replace(/\./g,'_')
+      obj['name'] = name
+    }
+    // console.log(JSON.stringify(obj))
+
+    switch (obj.type) {
+      // control objects
+      case 'dxf':
+        break
+      case 'layer':
+        // console.log('##### layer')
+        current = translateCurrent(current, layers, parts, options)
+        parts = []
+        // save the layer for later reference
+        obj['objects'] = [] // with a list of objects
+        obj['lnam'] = 'layer' + layers.length
+        layers.push(obj)
+        break
+      case 'variable':
+        // console.log(JSON.stringify(obj))
+        current = translateCurrent(current, layers, parts, options)
+        parts = []
+        saveVariable(obj, options)
+        break
+
+      // 3D entities
+      case '3dface':
+        // console.log('##### 3dface')
+        p = instantiatePolygon(obj, layers, options)
+        if (current === null) {
+          // console.log('##### start of 3dfaces CSG')
+          current = {type: '3dfaces'}
+          current['name'] = 'jscad' + numobjs
+          numobjs = numobjs + 1
+        }
+        break
+      case 'mesh':
+        // console.log('##### mesh')
+        current = translateCurrent(current, layers, parts, options)
+        parts = []
+        //objects.push(instantiateMesh(obj, layers, options))
+        translateMesh(obj, layers, options)
+        break
+
+      // 2D or 3D entities
+      case 'arc':
+        // console.log('##### arc')
+        current = translateCurrent(current, layers, parts, options)
+        parts = []
+        translateArc(obj, layers, options)
+        break
+      case 'circle':
+        // console.log('##### circle')
+        current = translateCurrent(current, layers, parts, options)
+        translateCircle(obj, layers, options)
+        parts = []
+        break
+      case 'ellipse':
+        // console.log('##### ellipse')
+        current = translateCurrent(current, layers, parts, options)
+        parts = []
+        translateEllipse(obj, layers, options)
+        break
+      case 'line':
+        // console.log('##### line')
+        current = translateCurrent(current, layers, parts, options)
+        parts = []
+        translateLine(obj, layers, options)
+        break
+      case 'polyline':
+        if (current === null) {
+          // console.log('##### start of polyline')
+          current = getPolyType(obj)
+          current['name'] = 'jscad' + numobjs
+          numobjs = numobjs + 1
+        }
+        break
+      case 'vertex':
+        // console.log('##### vertex')
+        p = instantiateVector(obj)
+        break
+      case 'seqend':
+        current = translateCurrent(current, layers, parts, options)
+        parts = []
+        break
+
+      // 2D entities
+      case 'lwpolyline':
+        // console.log('##### lwpolyline')
+        current = translateCurrent(current, layers, parts, options)
+        parts = []
+        translatePath2D(obj, layers, options)
+        break
+
+      default:
+        // console.log('##### ERROR')
+        // console.log(obj.type)
+        break
+    }
+    // accumlate polygons if necessary
+    if (p instanceof CSG.Polygon) {
+      // console.log('##### push Polygon')
+      parts.push(p)
+    }
+    // accumlate vectors if necessary
+    if (p instanceof CSG.Vector3D) {
+      // console.log('##### push Vector3D')
+      parts.push(p)
+    }
+    if (p instanceof CSG.Vector2D) {
+      // console.log('##### push Vector2D')
+      parts.push(p)
+    }
+  }
+  // translate the last object if necessary
+  current = translateCurrent(current, layers, parts, options)
+
+  // debug output
+  // console.log('**************************************************')
+  let script = 'function main() {\n  let layers = []\n  return layers.concat('
+  layers.forEach(
+    function (layer) {
+      let name = layer['lnam'] || 'Unknown'
+      script += `${name}(),`
+    }
+  )
+  script += '[])\n}\n'
+
+  // add helper functions for polygons and lines
+  script += 
+`function createVertex(point) {
+  return new CSG.Vertex(new CSG.Vector3D(point[0],point[1],point[2]))
+}
+function createPlane(pointandw) {
+  return new CSG.Plane(new CSG.Vector3D(pointandw[0],pointandw[1],pointandw[2]),pointandw[3])
+}
+function createPolygon(listofpoints,color,pointandw) {
+  let vertices = []
+  for (let point of listofpoints) {
+    vertices.push(createVertex(point))
+  }
+  let shared = new CSG.Polygon.Shared(color)
+  let plane = createPlane(pointandw)
+  return new CSG.Polygon(vertices,shared,plane)
+}
+`
+
+  layers.forEach(
+    function (layer) {
+      script += translateLayer(layer)
+    }
+  )
+  // console.log(script)
+  // console.log('**************************************************')
+  return script
+}
+
+module.exports = translateAsciiDxf
+
+},{"./autocad":79,"./instantiate":81,"@jscad/csg":18}],83:[function(require,module,exports){
+/*
+AutoCAD DXF Content
+
+These are the common headers, classes, tables, blocks, and objects required for AC2017 DXF files.
+
+## License
+
+Copyright (c) 2018 Z3 Development https://github.com/z3dev
+
+All code released under MIT license
+*/
+
+// Important Variables
+//   ANGDIR = 0 : counter clockwise angles
+//   INSUNITS = 4 : millimeters
+//
+const dxfHeaders = function () {
+  const content = `  0
+SECTION
+  2
+HEADER
+  9
+$ACADVER
+  1
+AC1027
+  9
+$ACADMAINTVER
+ 70
+8
+  9
+$DWGCODEPAGE
+  3
+ANSI_1252
+  9
+$LASTSAVEDBY
+  1
+unknown
+  9
+$REQUIREDVERSIONS
+160
+0
+  9
+$INSBASE
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$EXTMIN
+ 10
+1e+20
+ 20
+1e+20
+ 30
+1e+20
+  9
+$EXTMAX
+ 10
+-1e+20
+ 20
+-1e+20
+ 30
+-1e+20
+  9
+$LIMMIN
+ 10
+0.0
+ 20
+0.0
+  9
+$LIMMAX
+ 10
+12.0
+ 20
+9.0
+  9
+$ORTHOMODE
+ 70
+0
+  9
+$REGENMODE
+ 70
+1
+  9
+$FILLMODE
+ 70
+1
+  9
+$QTEXTMODE
+ 70
+0
+  9
+$MIRRTEXT
+ 70
+0
+  9
+$LTSCALE
+ 40
+1.0
+  9
+$ATTMODE
+ 70
+1
+  9
+$TEXTSIZE
+ 40
+0.2
+  9
+$TRACEWID
+ 40
+0.05
+  9
+$TEXTSTYLE
+  7
+Notes
+  9
+$CLAYER
+  8
+0
+  9
+$CELTYPE
+  6
+ByLayer
+  9
+$CECOLOR
+ 62
+256
+  9
+$CELTSCALE
+ 40
+1.0
+  9
+$DISPSILH
+ 70
+0
+  9
+$DIMSCALE
+ 40
+1.0
+  9
+$DIMASZ
+ 40
+3.0
+  9
+$DIMEXO
+ 40
+1.5
+  9
+$DIMDLI
+ 40
+6.0
+  9
+$DIMRND
+ 40
+0.0
+  9
+$DIMDLE
+ 40
+0.0
+  9
+$DIMEXE
+ 40
+3.0
+  9
+$DIMTP
+ 40
+0.0
+  9
+$DIMTM
+ 40
+0.0
+  9
+$DIMTXT
+ 40
+3.0
+  9
+$DIMCEN
+ 40
+3.0
+  9
+$DIMTSZ
+ 40
+0.0
+  9
+$DIMTOL
+ 70
+0
+  9
+$DIMLIM
+ 70
+0
+  9
+$DIMTIH
+ 70
+0
+  9
+$DIMTOH
+ 70
+0
+  9
+$DIMSE1
+ 70
+0
+  9
+$DIMSE2
+ 70
+0
+  9
+$DIMTAD
+ 70
+1
+  9
+$DIMZIN
+ 70
+3
+  9
+$DIMBLK
+  1
+
+  9
+$DIMASO
+ 70
+1
+  9
+$DIMSHO
+ 70
+1
+  9
+$DIMPOST
+  1
+
+  9
+$DIMAPOST
+  1
+
+  9
+$DIMALT
+ 70
+0
+  9
+$DIMALTD
+ 70
+2
+  9
+$DIMALTF
+ 40
+25.4
+  9
+$DIMLFAC
+ 40
+1.0
+  9
+$DIMTOFL
+ 70
+0
+  9
+$DIMTVP
+ 40
+0.0
+  9
+$DIMTIX
+ 70
+0
+  9
+$DIMSOXD
+ 70
+0
+  9
+$DIMSAH
+ 70
+0
+  9
+$DIMBLK1
+  1
+
+  9
+$DIMBLK2
+  1
+
+  9
+$DIMSTYLE
+  2
+Civil-Metric
+  9
+$DIMCLRD
+ 70
+0
+  9
+$DIMCLRE
+ 70
+0
+  9
+$DIMCLRT
+ 70
+0
+  9
+$DIMTFAC
+ 40
+1.0
+  9
+$DIMGAP
+ 40
+2.0
+  9
+$DIMJUST
+ 70
+0
+  9
+$DIMSD1
+ 70
+0
+  9
+$DIMSD2
+ 70
+0
+  9
+$DIMTOLJ
+ 70
+1
+  9
+$DIMTZIN
+ 70
+0
+  9
+$DIMALTZ
+ 70
+0
+  9
+$DIMALTTZ
+ 70
+0
+  9
+$DIMUPT
+ 70
+0
+  9
+$DIMDEC
+ 70
+2
+  9
+$DIMTDEC
+ 70
+2
+  9
+$DIMALTU
+ 70
+2
+  9
+$DIMALTTD
+ 70
+2
+  9
+$DIMTXSTY
+  7
+Standard
+  9
+$DIMAUNIT
+ 70
+0
+  9
+$DIMADEC
+ 70
+2
+  9
+$DIMALTRND
+ 40
+0.0
+  9
+$DIMAZIN
+ 70
+2
+  9
+$DIMDSEP
+ 70
+46
+  9
+$DIMATFIT
+ 70
+3
+  9
+$DIMFRAC
+ 70
+1
+  9
+$DIMLDRBLK
+  1
+
+  9
+$DIMLUNIT
+ 70
+2
+  9
+$DIMLWD
+ 70
+-2
+  9
+$DIMLWE
+ 70
+-2
+  9
+$DIMTMOVE
+ 70
+0
+  9
+$DIMFXL
+ 40
+1.0
+  9
+$DIMFXLON
+ 70
+0
+  9
+$DIMJOGANG
+ 40
+0.785398163397
+  9
+$DIMTFILL
+ 70
+0
+  9
+$DIMTFILLCLR
+ 70
+0
+  9
+$DIMARCSYM
+ 70
+0
+  9
+$DIMLTYPE
+  6
+
+  9
+$DIMLTEX1
+  6
+
+  9
+$DIMLTEX2
+  6
+
+  9
+$DIMTXTDIRECTION
+ 70
+0
+  9
+$LUNITS
+ 70
+2
+  9
+$LUPREC
+ 70
+4
+  9
+$SKETCHINC
+ 40
+0.1
+  9
+$FILLETRAD
+ 40
+0.0
+  9
+$AUNITS
+ 70
+4
+  9
+$AUPREC
+ 70
+5
+  9
+$MENU
+  1
+.
+  9
+$ELEVATION
+ 40
+0.0
+  9
+$PELEVATION
+ 40
+0.0
+  9
+$THICKNESS
+ 40
+0.0
+  9
+$LIMCHECK
+ 70
+0
+  9
+$CHAMFERA
+ 40
+0.0
+  9
+$CHAMFERB
+ 40
+0.0
+  9
+$CHAMFERC
+ 40
+0.0
+  9
+$CHAMFERD
+ 40
+0.0
+  9
+$SKPOLY
+ 70
+0
+  9
+$TDCREATE
+ 40
+2457986.69756
+  9
+$TDUCREATE
+ 40
+2455631.2632
+  9
+$TDUPDATE
+ 40
+2457986.69756
+  9
+$TDUUPDATE
+ 40
+2456436.43179
+  9
+$TDINDWG
+ 40
+0.0003490741
+  9
+$TDUSRTIMER
+ 40
+0.0003487153
+  9
+$USRTIMER
+ 70
+1
+  9
+$ANGBASE
+ 50
+0.0
+  9
+$ANGDIR
+ 70
+0
+  9
+$PDMODE
+ 70
+0
+  9
+$PDSIZE
+ 40
+0.0
+  9
+$PLINEWID
+ 40
+0.0
+  9
+$SPLFRAME
+ 70
+0
+  9
+$SPLINETYPE
+ 70
+6
+  9
+$SPLINESEGS
+ 70
+8
+  9
+$HANDSEED
+  5
+5C7
+  9
+$SURFTAB1
+ 70
+6
+  9
+$SURFTAB2
+ 70
+6
+  9
+$SURFTYPE
+ 70
+6
+  9
+$SURFU
+ 70
+6
+  9
+$SURFV
+ 70
+6
+  9
+$UCSBASE
+  2
+
+  9
+$UCSNAME
+  2
+
+  9
+$UCSORG
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$UCSXDIR
+ 10
+1.0
+ 20
+0.0
+ 30
+0.0
+  9
+$UCSYDIR
+ 10
+0.0
+ 20
+1.0
+ 30
+0.0
+  9
+$UCSORTHOREF
+  2
+
+  9
+$UCSORTHOVIEW
+ 70
+0
+  9
+$UCSORGTOP
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$UCSORGBOTTOM
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$UCSORGLEFT
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$UCSORGRIGHT
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$UCSORGFRONT
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$UCSORGBACK
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$PUCSBASE
+  2
+
+  9
+$PUCSNAME
+  2
+
+  9
+$PUCSORG
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$PUCSXDIR
+ 10
+1.0
+ 20
+0.0
+ 30
+0.0
+  9
+$PUCSYDIR
+ 10
+0.0
+ 20
+1.0
+ 30
+0.0
+  9
+$PUCSORTHOREF
+  2
+
+  9
+$PUCSORTHOVIEW
+ 70
+0
+  9
+$PUCSORGTOP
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$PUCSORGBOTTOM
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$PUCSORGLEFT
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$PUCSORGRIGHT
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$PUCSORGFRONT
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$PUCSORGBACK
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$USERI1
+ 70
+0
+  9
+$USERI2
+ 70
+0
+  9
+$USERI3
+ 70
+0
+  9
+$USERI4
+ 70
+0
+  9
+$USERI5
+ 70
+0
+  9
+$USERR1
+ 40
+0.0
+  9
+$USERR2
+ 40
+0.0
+  9
+$USERR3
+ 40
+0.0
+  9
+$USERR4
+ 40
+0.0
+  9
+$USERR5
+ 40
+0.0
+  9
+$WORLDVIEW
+ 70
+1
+  9
+$SHADEDGE
+ 70
+3
+  9
+$SHADEDIF
+ 70
+70
+  9
+$TILEMODE
+ 70
+1
+  9
+$MAXACTVP
+ 70
+64
+  9
+$PINSBASE
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$PLIMCHECK
+ 70
+0
+  9
+$PEXTMIN
+ 10
+0.628866766397
+ 20
+0.799999952316
+ 30
+0.0
+  9
+$PEXTMAX
+ 10
+9.02886638493
+ 20
+7.19999957085
+ 30
+0.0
+  9
+$PLIMMIN
+ 10
+-0.700541819174
+ 20
+-0.228100386192
+  9
+$PLIMMAX
+ 10
+10.2994579405
+ 20
+8.27189937351
+  9
+$UNITMODE
+ 70
+0
+  9
+$VISRETAIN
+ 70
+1
+  9
+$PLINEGEN
+ 70
+0
+  9
+$PSLTSCALE
+ 70
+1
+  9
+$TREEDEPTH
+ 70
+3020
+  9
+$CMLSTYLE
+  2
+Standard
+  9
+$CMLJUST
+ 70
+0
+  9
+$CMLSCALE
+ 40
+1.0
+  9
+$PROXYGRAPHICS
+ 70
+1
+  9
+$MEASUREMENT
+ 70
+1
+  9
+$CELWEIGHT
+370
+-1
+  9
+$ENDCAPS
+280
+0
+  9
+$JOINSTYLE
+280
+0
+  9
+$LWDISPLAY
+290
+0
+  9
+$INSUNITS
+ 70
+4
+  9
+$HYPERLINKBASE
+  1
+
+  9
+$STYLESHEET
+  1
+
+  9
+$XEDIT
+290
+1
+  9
+$CEPSNTYPE
+380
+0
+  9
+$PSTYLEMODE
+290
+1
+  9
+$FINGERPRINTGUID
+  2
+{39DB1BDD-BC6C-46D3-A333-DFCC0DC4782D}
+  9
+$VERSIONGUID
+  2
+{69EEBB2D-7039-498F-9366-3F994E4A07E7}
+  9
+$EXTNAMES
+290
+1
+  9
+$PSVPSCALE
+ 40
+0.0
+  9
+$OLESTARTUP
+290
+0
+  9
+$SORTENTS
+280
+127
+  9
+$INDEXCTL
+280
+0
+  9
+$HIDETEXT
+280
+1
+  9
+$XCLIPFRAME
+280
+0
+  9
+$HALOGAP
+280
+0
+  9
+$OBSCOLOR
+ 70
+257
+  9
+$OBSLTYPE
+280
+0
+  9
+$INTERSECTIONDISPLAY
+280
+0
+  9
+$INTERSECTIONCOLOR
+ 70
+257
+  9
+$DIMASSOC
+280
+2
+  9
+$PROJECTNAME
+  1
+
+  9
+$CAMERADISPLAY
+290
+0
+  9
+$LENSLENGTH
+ 40
+50.0
+  9
+$CAMERAHEIGHT
+ 40
+0.0
+  9
+$STEPSPERSEC
+ 40
+2.0
+  9
+$STEPSIZE
+ 40
+6.0
+  9
+$3DDWFPREC
+ 40
+2.0
+  9
+$PSOLWIDTH
+ 40
+0.25
+  9
+$PSOLHEIGHT
+ 40
+4.0
+  9
+$LOFTANG1
+ 40
+1.57079632679
+  9
+$LOFTANG2
+ 40
+1.57079632679
+  9
+$LOFTMAG1
+ 40
+0.0
+  9
+$LOFTMAG2
+ 40
+0.0
+  9
+$LOFTPARAM
+ 70
+7
+  9
+$LOFTNORMALS
+280
+1
+  9
+$LATITUDE
+ 40
+37.795
+  9
+$LONGITUDE
+ 40
+-122.394
+  9
+$NORTHDIRECTION
+ 40
+0.0
+  9
+$TIMEZONE
+ 70
+-8000
+  9
+$LIGHTGLYPHDISPLAY
+280
+1
+  9
+$TILEMODELIGHTSYNCH
+280
+1
+  9
+$CMATERIAL
+347
+96
+  9
+$SOLIDHIST
+280
+1
+  9
+$SHOWHIST
+280
+1
+  9
+$DWFFRAME
+280
+2
+  9
+$DGNFRAME
+280
+0
+  9
+$REALWORLDSCALE
+290
+1
+  9
+$INTERFERECOLOR
+ 62
+1
+  9
+$INTERFEREOBJVS
+345
+A3
+  9
+$INTERFEREVPVS
+346
+A0
+  9
+$CSHADOW
+280
+0
+  9
+$SHADOWPLANELOCATION
+ 40
+0.0
+  0
+ENDSEC`
+  return content
+}
+
+const dxfClasses = function () {
+  const content = `  0
+SECTION
+  2
+CLASSES
+  0
+CLASS
+  1
+ACDBDICTIONARYWDFLT
+  2
+AcDbDictionaryWithDefault
+  3
+ObjectDBX Classes
+ 90
+0
+ 91
+1
+280
+0
+281
+0
+  0
+CLASS
+  1
+DICTIONARYVAR
+  2
+AcDbDictionaryVar
+  3
+ObjectDBX Classes
+ 90
+0
+ 91
+15
+280
+0
+281
+0
+  0
+CLASS
+  1
+TABLESTYLE
+  2
+AcDbTableStyle
+  3
+ObjectDBX Classes
+ 90
+4095
+ 91
+1
+280
+0
+281
+0
+  0
+CLASS
+  1
+MATERIAL
+  2
+AcDbMaterial
+  3
+ObjectDBX Classes
+ 90
+1153
+ 91
+3
+280
+0
+281
+0
+  0
+CLASS
+  1
+VISUALSTYLE
+  2
+AcDbVisualStyle
+  3
+ObjectDBX Classes
+ 90
+4095
+ 91
+26
+280
+0
+281
+0
+  0
+CLASS
+  1
+SCALE
+  2
+AcDbScale
+  3
+ObjectDBX Classes
+ 90
+1153
+ 91
+17
+280
+0
+281
+0
+  0
+CLASS
+  1
+MLEADERSTYLE
+  2
+AcDbMLeaderStyle
+  3
+ACDB_MLEADERSTYLE_CLASS
+ 90
+4095
+ 91
+3
+280
+0
+281
+0
+  0
+CLASS
+  1
+CELLSTYLEMAP
+  2
+AcDbCellStyleMap
+  3
+ObjectDBX Classes
+ 90
+1152
+ 91
+2
+280
+0
+281
+0
+  0
+CLASS
+  1
+EXACXREFPANELOBJECT
+  2
+ExAcXREFPanelObject
+  3
+EXAC_ESW
+ 90
+1025
+ 91
+0
+280
+0
+281
+0
+  0
+CLASS
+  1
+NPOCOLLECTION
+  2
+AcDbImpNonPersistentObjectsCollection
+  3
+ObjectDBX Classes
+ 90
+1153
+ 91
+0
+280
+0
+281
+0
+  0
+CLASS
+  1
+LAYER_INDEX
+  2
+AcDbLayerIndex
+  3
+ObjectDBX Classes
+ 90
+0
+ 91
+0
+280
+0
+281
+0
+  0
+CLASS
+  1
+SPATIAL_INDEX
+  2
+AcDbSpatialIndex
+  3
+ObjectDBX Classes
+ 90
+0
+ 91
+0
+280
+0
+281
+0
+  0
+CLASS
+  1
+IDBUFFER
+  2
+AcDbIdBuffer
+  3
+ObjectDBX Classes
+ 90
+0
+ 91
+0
+280
+0
+281
+0
+  0
+CLASS
+  1
+DIMASSOC
+  2
+AcDbDimAssoc
+  3
+"AcDbDimAssoc|Product Desc:     AcDim ARX App For Dimension|Company:          Autodesk, Inc.|WEB Address:      www.autodesk.com"
+ 90
+0
+ 91
+0
+280
+0
+281
+0
+  0
+CLASS
+  1
+ACDBSECTIONVIEWSTYLE
+  2
+AcDbSectionViewStyle
+  3
+ObjectDBX Classes
+ 90
+1025
+ 91
+1
+280
+0
+281
+0
+  0
+CLASS
+  1
+ACDBDETAILVIEWSTYLE
+  2
+AcDbDetailViewStyle
+  3
+ObjectDBX Classes
+ 90
+1025
+ 91
+1
+280
+0
+281
+0
+  0
+CLASS
+  1
+IMAGEDEF
+  2
+AcDbRasterImageDef
+  3
+ISM
+ 90
+0
+ 91
+1
+280
+0
+281
+0
+  0
+CLASS
+  1
+RASTERVARIABLES
+  2
+AcDbRasterVariables
+  3
+ISM
+ 90
+0
+ 91
+1
+280
+0
+281
+0
+  0
+CLASS
+  1
+IMAGEDEF_REACTOR
+  2
+AcDbRasterImageDefReactor
+  3
+ISM
+ 90
+1
+ 91
+1
+280
+0
+281
+0
+  0
+CLASS
+  1
+IMAGE
+  2
+AcDbRasterImage
+  3
+ISM
+ 90
+2175
+ 91
+1
+280
+0
+281
+1
+  0
+CLASS
+  1
+PDFDEFINITION
+  2
+AcDbPdfDefinition
+  3
+ObjectDBX Classes
+ 90
+1153
+ 91
+1
+280
+0
+281
+0
+  0
+CLASS
+  1
+PDFUNDERLAY
+  2
+AcDbPdfReference
+  3
+ObjectDBX Classes
+ 90
+4095
+ 91
+1
+280
+0
+281
+1
+  0
+CLASS
+  1
+DWFDEFINITION
+  2
+AcDbDwfDefinition
+  3
+ObjectDBX Classes
+ 90
+1153
+ 91
+2
+280
+0
+281
+0
+  0
+CLASS
+  1
+DWFUNDERLAY
+  2
+AcDbDwfReference
+  3
+ObjectDBX Classes
+ 90
+1153
+ 91
+1
+280
+0
+281
+1
+  0
+CLASS
+  1
+DGNDEFINITION
+  2
+AcDbDgnDefinition
+  3
+ObjectDBX Classes
+ 90
+1153
+ 91
+2
+280
+0
+281
+0
+  0
+CLASS
+  1
+DGNUNDERLAY
+  2
+AcDbDgnReference
+  3
+ObjectDBX Classes
+ 90
+1153
+ 91
+1
+280
+0
+281
+1
+  0
+ENDSEC`
+  return content
+}
+
+const dxfTables = function () {
+  const content = `  0
+SECTION
+  2
+TABLES
+  0
+TABLE
+  2
+VPORT
+  5
+8
+330
+0
+100
+AcDbSymbolTable
+ 70
+0
+  0
+ENDTAB
+  0
+TABLE
+  2
+LTYPE
+  5
+5F
+330
+0
+100
+AcDbSymbolTable
+ 70
+7
+  0
+LTYPE
+  5
+14
+330
+5F
+100
+AcDbSymbolTableRecord
+100
+AcDbLinetypeTableRecord
+  2
+ByBlock
+ 70
+0
+  3
+
+ 72
+65
+ 73
+0
+ 40
+0.0
+  0
+LTYPE
+  5
+15
+330
+5F
+100
+AcDbSymbolTableRecord
+100
+AcDbLinetypeTableRecord
+  2
+ByLayer
+ 70
+0
+  3
+
+ 72
+65
+ 73
+0
+ 40
+0.0
+  0
+LTYPE
+  5
+16
+330
+5F
+100
+AcDbSymbolTableRecord
+100
+AcDbLinetypeTableRecord
+  2
+Continuous
+ 70
+0
+  3
+Solid line
+ 72
+65
+ 73
+0
+ 40
+0.0
+  0
+LTYPE
+  5
+1B1
+330
+5F
+100
+AcDbSymbolTableRecord
+100
+AcDbLinetypeTableRecord
+  2
+CENTER
+ 70
+0
+  3
+Center ____ _ ____ _ ____ _ ____ _ ____ _ ____
+ 72
+65
+ 73
+4
+ 40
+2.0
+ 49
+1.25
+ 74
+0
+ 49
+-0.25
+ 74
+0
+ 49
+0.25
+ 74
+0
+ 49
+-0.25
+ 74
+0
+  0
+LTYPE
+  5
+1B2
+330
+5F
+100
+AcDbSymbolTableRecord
+100
+AcDbLinetypeTableRecord
+  2
+DASHED
+ 70
+0
+  3
+Dashed __ __ __ __ __ __ __ __ __ __ __ __ __ _
+ 72
+65
+ 73
+2
+ 40
+0.75
+ 49
+0.5
+ 74
+0
+ 49
+-0.25
+ 74
+0
+  0
+LTYPE
+  5
+1B3
+330
+5F
+100
+AcDbSymbolTableRecord
+100
+AcDbLinetypeTableRecord
+  2
+PHANTOM
+ 70
+0
+  3
+Phantom ______  __  __  ______  __  __  ______
+ 72
+65
+ 73
+6
+ 40
+2.5
+ 49
+1.25
+ 74
+0
+ 49
+-0.25
+ 74
+0
+ 49
+0.25
+ 74
+0
+ 49
+-0.25
+ 74
+0
+ 49
+0.25
+ 74
+0
+ 49
+-0.25
+ 74
+0
+  0
+LTYPE
+  5
+39E
+330
+5F
+100
+AcDbSymbolTableRecord
+100
+AcDbLinetypeTableRecord
+  2
+HIDDEN
+ 70
+0
+  3
+Hidden __ __ __ __ __ __ __ __ __ __ __ __ __ __
+ 72
+65
+ 73
+2
+ 40
+9.525
+ 49
+6.35
+ 74
+0
+ 49
+-3.175
+ 74
+0
+  0
+ENDTAB
+  0
+TABLE
+  2
+LAYER
+  5
+2
+330
+0
+100
+AcDbSymbolTable
+ 70
+3
+  0
+LAYER
+  5
+10
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+0
+ 70
+0
+ 62
+7
+  6
+Continuous
+370
+-3
+390
+F
+347
+98
+348
+0
+  0
+LAYER
+  5
+1B4
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+View Port
+ 70
+0
+ 62
+7
+  6
+Continuous
+290
+0
+370
+-3
+390
+F
+347
+98
+348
+0
+  0
+LAYER
+  5
+21D
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+Defpoints
+ 70
+0
+ 62
+7
+  6
+Continuous
+290
+0
+370
+-3
+390
+F
+347
+98
+348
+0
+  0
+ENDTAB
+  0
+TABLE
+  2
+STYLE
+  5
+3
+330
+0
+100
+AcDbSymbolTable
+ 70
+3
+  0
+STYLE
+  5
+11
+330
+3
+100
+AcDbSymbolTableRecord
+100
+AcDbTextStyleTableRecord
+  2
+Standard
+ 70
+0
+ 40
+0.0
+ 41
+1.0
+ 50
+0.0
+ 71
+0
+ 42
+0.2
+  3
+arial.ttf
+  4
+
+  0
+STYLE
+  5
+DC
+330
+3
+100
+AcDbSymbolTableRecord
+100
+AcDbTextStyleTableRecord
+  2
+Annotative
+ 70
+0
+ 40
+0.0
+ 41
+1.0
+ 50
+0.0
+ 71
+0
+ 42
+0.2
+  3
+arial.ttf
+  4
+
+  0
+STYLE
+  5
+178
+330
+3
+100
+AcDbSymbolTableRecord
+100
+AcDbTextStyleTableRecord
+  2
+Notes
+ 70
+0
+ 40
+3.0
+ 41
+1.0
+ 50
+0.0
+ 71
+0
+ 42
+0.2
+  3
+arial.ttf
+  4
+
+  0
+ENDTAB
+  0
+TABLE
+  2
+VIEW
+  5
+6
+330
+0
+100
+AcDbSymbolTable
+ 70
+0
+  0
+ENDTAB
+  0
+TABLE
+  2
+UCS
+  5
+7
+330
+0
+100
+AcDbSymbolTable
+ 70
+0
+  0
+ENDTAB
+  0
+TABLE
+  2
+APPID
+  5
+9
+330
+0
+100
+AcDbSymbolTable
+ 70
+12
+  0
+APPID
+  5
+12
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbRegAppTableRecord
+  2
+ACAD
+ 70
+0
+  0
+APPID
+  5
+DD
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbRegAppTableRecord
+  2
+AcadAnnoPO
+ 70
+0
+  0
+APPID
+  5
+DE
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbRegAppTableRecord
+  2
+AcadAnnotative
+ 70
+0
+  0
+APPID
+  5
+DF
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbRegAppTableRecord
+  2
+ACAD_DSTYLE_DIMJAG
+ 70
+0
+  0
+APPID
+  5
+E0
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbRegAppTableRecord
+  2
+ACAD_DSTYLE_DIMTALN
+ 70
+0
+  0
+APPID
+  5
+107
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbRegAppTableRecord
+  2
+ACAD_MLEADERVER
+ 70
+0
+  0
+APPID
+  5
+1B5
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbRegAppTableRecord
+  2
+AcAecLayerStandard
+ 70
+0
+  0
+APPID
+  5
+1BA
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbRegAppTableRecord
+  2
+ACAD_EXEMPT_FROM_CAD_STANDARDS
+ 70
+0
+  0
+APPID
+  5
+237
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbRegAppTableRecord
+  2
+ACAD_DSTYLE_DIMBREAK
+ 70
+0
+  0
+APPID
+  5
+28E
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbRegAppTableRecord
+  2
+ACAD_PSEXT
+ 70
+0
+  0
+APPID
+  5
+4B0
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbRegAppTableRecord
+  2
+ACAD_NAV_VCDISPLAY
+ 70
+0
+  0
+APPID
+  5
+4E3
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbRegAppTableRecord
+  2
+HATCHBACKGROUNDCOLOR
+ 70
+0
+  0
+ENDTAB
+  0
+TABLE
+  2
+DIMSTYLE
+  5
+A
+330
+0
+100
+AcDbSymbolTable
+ 70
+3
+100
+AcDbDimStyleTable
+ 71
+3
+340
+242
+340
+27
+340
+E1
+  0
+DIMSTYLE
+105
+27
+330
+A
+100
+AcDbSymbolTableRecord
+100
+AcDbDimStyleTableRecord
+  2
+Standard
+ 70
+0
+ 41
+3.0
+ 42
+2.0
+ 43
+9.0
+ 44
+5.0
+140
+3.0
+141
+2.0
+147
+2.0
+340
+11
+1001
+ACAD_DSTYLE_DIMJAG
+1070
+388
+1040
+38.0
+1001
+ACAD_DSTYLE_DIMBREAK
+1070
+391
+1040
+90.0
+1001
+ACAD_DSTYLE_DIMTALN
+1070
+392
+1070
+0
+  0
+DIMSTYLE
+105
+E1
+330
+A
+100
+AcDbSymbolTableRecord
+100
+AcDbDimStyleTableRecord
+  2
+Annotative
+ 70
+0
+ 40
+0.0
+ 41
+3.0
+ 42
+2.5
+ 43
+10.0
+ 44
+5.0
+140
+3.0
+141
+2.0
+147
+2.0
+340
+11
+1001
+AcadAnnotative
+1000
+AnnotativeData
+1002
+{
+1070
+1
+1070
+1
+1002
+}
+1001
+ACAD_DSTYLE_DIMJAG
+1070
+388
+1040
+38.0
+1001
+ACAD_DSTYLE_DIMBREAK
+1070
+391
+1040
+90.0
+1001
+ACAD_DSTYLE_DIMTALN
+1070
+392
+1070
+0
+  0
+DIMSTYLE
+105
+242
+330
+A
+100
+AcDbSymbolTableRecord
+100
+AcDbDimStyleTableRecord
+  2
+Civil-Metric
+ 70
+0
+ 41
+3.0
+ 42
+1.5
+ 43
+6.0
+ 44
+3.0
+ 73
+0
+ 74
+0
+ 77
+1
+ 78
+3
+ 79
+2
+140
+3.0
+141
+3.0
+147
+2.0
+179
+2
+271
+2
+272
+2
+276
+1
+340
+11
+1001
+ACAD_DSTYLE_DIMBREAK
+1070
+391
+1040
+3.0
+1001
+ACAD_DSTYLE_DIMJAG
+1070
+388
+1040
+38.0
+1001
+ACAD_DSTYLE_DIMTALN
+1070
+392
+1070
+0
+  0
+ENDTAB
+  0
+TABLE
+  2
+BLOCK_RECORD
+  5
+1
+330
+0
+100
+AcDbSymbolTable
+ 70
+4
+  0
+BLOCK_RECORD
+  5
+1F
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+*Model_Space
+340
+530
+ 70
+0
+280
+1
+281
+0
+  0
+BLOCK_RECORD
+  5
+58
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+*Paper_Space
+340
+531
+ 70
+0
+280
+1
+281
+0
+  0
+BLOCK_RECORD
+  5
+238
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+_ArchTick
+340
+0
+ 70
+0
+280
+1
+281
+0
+  0
+BLOCK_RECORD
+  5
+23C
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+_Open30
+340
+0
+ 70
+0
+280
+1
+281
+0
+  0
+ENDTAB
+  0
+ENDSEC`
+  return content
+}
+
+const dxfBlocks = function () {
+  const content = `  0
+SECTION
+  2
+BLOCKS
+  0
+BLOCK
+  5
+23A
+330
+238
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+_ArchTick
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+_ArchTick
+  1
+
+  0
+LWPOLYLINE
+  5
+239
+330
+238
+100
+AcDbEntity
+  8
+0
+  6
+ByBlock
+ 62
+0
+100
+AcDbPolyline
+ 90
+2
+ 70
+0
+ 43
+0.15
+ 10
+-0.5
+ 20
+-0.5
+ 10
+0.5
+ 20
+0.5
+  0
+ENDBLK
+  5
+23B
+330
+238
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+20
+330
+1F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+*Model_Space
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+*Model_Space
+  1
+
+  0
+ENDBLK
+  5
+21
+330
+1F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+5A
+330
+58
+100
+AcDbEntity
+ 67
+1
+  8
+0
+100
+AcDbBlockBegin
+  2
+*Paper_Space
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+*Paper_Space
+  1
+
+  0
+ENDBLK
+  5
+5B
+330
+58
+100
+AcDbEntity
+ 67
+1
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+240
+330
+23C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+_Open30
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+_Open30
+  1
+
+  0
+LINE
+  5
+23D
+330
+23C
+100
+AcDbEntity
+  8
+0
+  6
+ByBlock
+ 62
+0
+370
+-2
+100
+AcDbLine
+ 10
+-1.0
+ 20
+0.26794919
+ 30
+0.0
+ 11
+0.0
+ 21
+0.0
+ 31
+0.0
+  0
+LINE
+  5
+23E
+330
+23C
+100
+AcDbEntity
+  8
+0
+  6
+ByBlock
+ 62
+0
+370
+-2
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+-1.0
+ 21
+-0.26794919
+ 31
+0.0
+  0
+LINE
+  5
+23F
+330
+23C
+100
+AcDbEntity
+  8
+0
+  6
+ByBlock
+ 62
+0
+370
+-2
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+-1.0
+ 21
+0.0
+ 31
+0.0
+  0
+ENDBLK
+  5
+241
+330
+23C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+ENDSEC`
+  return content
+}
+
+const dxfObjects = function () {
+  const content = `  0
+SECTION
+  2
+OBJECTS
+  0
+DICTIONARY
+  5
+C
+330
+0
+100
+AcDbDictionary
+281
+1
+  3
+ACAD_COLOR
+350
+524
+  3
+ACAD_GROUP
+350
+525
+  3
+ACAD_LAYOUT
+350
+526
+  3
+ACAD_MATERIAL
+350
+527
+  3
+ACAD_MLEADERSTYLE
+350
+528
+  3
+ACAD_MLINESTYLE
+350
+529
+  3
+ACAD_PLOTSETTINGS
+350
+52A
+  3
+ACAD_PLOTSTYLENAME
+350
+52C
+  3
+ACAD_SCALELIST
+350
+52D
+  3
+ACAD_TABLESTYLE
+350
+52E
+  3
+ACAD_VISUALSTYLE
+350
+52F
+  0
+DICTIONARY
+  5
+524
+330
+C
+100
+AcDbDictionary
+281
+1
+  0
+DICTIONARY
+  5
+525
+330
+C
+100
+AcDbDictionary
+281
+1
+  0
+DICTIONARY
+  5
+526
+330
+C
+100
+AcDbDictionary
+281
+1
+  3
+Model
+350
+530
+  3
+Layout1
+350
+531
+  0
+DICTIONARY
+  5
+527
+330
+C
+100
+AcDbDictionary
+281
+1
+  0
+DICTIONARY
+  5
+528
+330
+C
+100
+AcDbDictionary
+281
+1
+  0
+DICTIONARY
+  5
+529
+330
+C
+100
+AcDbDictionary
+281
+1
+  0
+DICTIONARY
+  5
+52A
+330
+C
+100
+AcDbDictionary
+281
+1
+  0
+ACDBPLACEHOLDER
+  5
+52B
+330
+52C
+  0
+ACDBDICTIONARYWDFLT
+  5
+52C
+330
+C
+100
+AcDbDictionary
+281
+1
+  3
+Normal
+350
+52B
+100
+AcDbDictionaryWithDefault
+340
+52B
+  0
+DICTIONARY
+  5
+52D
+330
+C
+100
+AcDbDictionary
+281
+1
+  0
+DICTIONARY
+  5
+52E
+330
+C
+100
+AcDbDictionary
+281
+1
+  0
+DICTIONARY
+  5
+52F
+330
+C
+100
+AcDbDictionary
+281
+1
+  0
+LAYOUT
+  5
+530
+330
+526
+100
+AcDbPlotSettings
+  1
+
+  2
+DWFx ePlot (XPS Compatible).pc3
+  4
+ANSI_A_(8.50_x_11.00_Inches)
+  6
+
+ 40
+5.8
+ 41
+17.8
+ 42
+5.8
+ 43
+17.8
+ 44
+215.9
+ 45
+279.4
+ 46
+0.0
+ 47
+0.0
+ 48
+0.0
+ 49
+0.0
+140
+0.0
+141
+0.0
+142
+1.0
+143
+14.53
+ 70
+11952
+ 72
+0
+ 73
+1
+ 74
+0
+  7
+
+ 75
+0
+147
+0.069
+148
+114.98
+149
+300.29
+100
+AcDbLayout
+  1
+Model
+ 70
+1
+ 71
+0
+ 10
+0.0
+ 20
+0.0
+ 11
+12.0
+ 21
+9.0
+ 12
+0.0
+ 22
+0.0
+ 32
+0.0
+ 14
+0.0
+ 24
+0.0
+ 34
+0.0
+ 15
+0.0
+ 25
+0.0
+ 35
+0.0
+146
+0.0
+ 13
+0.0
+ 23
+0.0
+ 33
+0.0
+ 16
+1.0
+ 26
+0.0
+ 36
+0.0
+ 17
+0.0
+ 27
+1.0
+ 37
+0.0
+ 76
+0
+330
+1F
+  0
+LAYOUT
+  5
+531
+330
+526
+100
+AcDbPlotSettings
+  1
+
+  2
+DWFx ePlot (XPS Compatible).pc3
+  4
+ANSI_A_(8.50_x_11.00_Inches)
+  6
+
+ 40
+5.8
+ 41
+17.8
+ 42
+5.8
+ 43
+17.8
+ 44
+215.9
+ 45
+279.4
+ 46
+0.0
+ 47
+0.0
+ 48
+0.0
+ 49
+0.0
+140
+0.0
+141
+0.0
+142
+1.0
+143
+1.0
+ 70
+688
+ 72
+0
+ 73
+1
+ 74
+5
+  7
+acad.ctb
+ 75
+16
+147
+1.0
+148
+0.0
+149
+0.0
+100
+AcDbLayout
+  1
+Layout1
+ 70
+1
+ 71
+1
+ 10
+-0.7
+ 20
+-0.23
+ 11
+10.3
+ 21
+8.27
+ 12
+0.0
+ 22
+0.0
+ 32
+0.0
+ 14
+0.63
+ 24
+0.8
+ 34
+0.0
+ 15
+9.0
+ 25
+7.2
+ 35
+0.0
+146
+0.0
+ 13
+0.0
+ 23
+0.0
+ 33
+0.0
+ 16
+1.0
+ 26
+0.0
+ 36
+0.0
+ 17
+0.0
+ 27
+1.0
+ 37
+0.0
+ 76
+0
+330
+58
+  0
+ENDSEC`
+  return content
+}
+
+module.exports = {
+  dxfHeaders,
+  dxfClasses,
+  dxfTables,
+  dxfBlocks,
+  dxfObjects
+}
+
+},{}],84:[function(require,module,exports){
+/*
+JSCAD Object to AutoCAD DXF Entity Serialization
+
+## License
+
+Copyright (c) 2018 Z3 Development https://github.com/z3dev
+
+All code released under MIT license
+
+Notes:
+1) CAG conversion to:
+     POLYLINE
+     LWPOLYLINE
+2) CSG conversion to:
+     3DFACE
+     POLYLINE (face mesh)
+3) Path2D conversion to:
+     LWPOLYLINE
+TBD
+1) support binary output
+2) add color conversion, and translation for CSG
+
+*/
+
+const {isCAG, isCSG} = require('@jscad/csg')
+const {ensureManifoldness} = require('@jscad/io-utils')
+const {dxfHeaders, dxfClasses, dxfTables, dxfBlocks, dxfObjects} = require('./autocad_AC2017')
+
+const mimeType = 'application/dxf'
+
+/** Serialize the give objects to AutoCad DXF format.
+ * @param {Object|Array} objects - objects to serialize as DXF
+ * @param {Object} [options] - options for serialization
+ * @returns {Array} serialized contents, DXF format
+ */
+const serialize = function (objects, options) {
+  const defaults = {
+    cagTo: 'lwpolyline', // or polyline
+    csgTo: '3dface', // or polyline
+    pathTo: 'lwpolyline',
+    statusCallback: null
+  }
+  options = Object.assign({}, defaults, options)
+
+  let dxfContent = `999
+DXF generated by JSCAD
+${dxfHeaders(options)}
+${dxfClasses(options)}
+${dxfTables(options)}
+${dxfBlocks(options)}
+${dxfEntities(objects, options)}
+${dxfObjects(options)}
+  0
+EOF
+`
+  return [dxfContent]
+}
+
+/** Serialize the given objects as a DXF entity section
+ * @param {Array} objects - objects to serialize as DXF
+ * @param {Object} options - options for serialization
+ * @returns {Object} serialized contents, DXF format
+ */
+const dxfEntities = function (objects, options) {
+  objects = toArray(objects)
+  let entityContents = objects.map(function (object, i) {
+    if (isCAG(object)) {
+      let paths = object.getOutlinePaths()
+      if (options.cagTo === 'polyline') {
+        return PathsToPolyine(paths, options)
+      }
+      return PathsToLwpolyine(paths, options)
+    }
+    if (isCSG(object)) {
+      object = ensureManifoldness(object)
+      if (options.csgTo === 'polyline') {
+        return PolygonsToPolyline(object, options)
+      }
+      return PolygonsTo3DFaces(object, options)
+    }
+    if (isPath(object)) {
+    // mimic a CAG outline path
+      let points = object.getPoints()
+      let closed = object.isClosed()
+      let path = {closed: closed, points: points}
+      return PathsToLwpolyine([path], options)
+    }
+    return ''
+  })
+  let section = `  0
+SECTION
+  2
+ENTITIES
+`
+  entityContents.forEach(function (content) {
+    if (content) {
+      section += content
     }
   })
-  str += '  0\nENDSEC\n  0\nEOF\n'
+  section += `  0
+ENDSEC`
+  return section
+}
+
+//
+// convert the given paths (from CAG outlines) to DXF lwpolyline entities
+// @return array of strings
+//
+// Group Codes Used:
+// 5 - Handle, unique HEX value, e.g. 5C6
+// 8 - layer name (0 is default layer)
+// 67 (0 - model space, 1 - paper space)
+// 100 -
+//
+const PathsToLwpolyine = function (paths, options) {
+  options.statusCallback && options.statusCallback({progress: 0})
+  let str = ''
+  paths.map(function (path, i) {
+    if (path.points.length < 1) return
+    let numpointsClosed = path.points.length + (path.closed ? 1 : 0)
+    str += `  0
+LWPOLYLINE
+  5
+${getEntityId()}
+  100
+AcDbEntity
+  8
+0
+  67
+0
+  100
+AcDbPolyline
+  90
+${numpointsClosed}
+  70
+${(path.closed ? 1 : 0)}
+`
+    for (let pointindex = 0; pointindex < numpointsClosed; pointindex++) {
+      let pointindexwrapped = pointindex
+      if (pointindexwrapped >= path.points.length) pointindexwrapped -= path.points.length
+      let point = path.points[pointindexwrapped]
+      str += `  10
+${point.x}
+  20
+${point.y}
+`
+    }
+    options.statusCallback && options.statusCallback({progress: 100 * i / paths.length})
+  })
+  options.statusCallback && options.statusCallback({progress: 100})
   return [str]
+}
+
+//
+// convert the given paths (from CAG outlines) to DXF polyline (2D line) entities
+// @return array of strings
+//
+const PathsToPolyine = function (paths, options) {
+  options.statusCallback && options.statusCallback({progress: 0})
+  let str = ''
+  paths.map(function (path, i) {
+    let numpointsClosed = path.points.length + (path.closed ? 1 : 0)
+    str += `  0
+POLYLINE
+  5
+${getEntityId()}
+  100
+AcDbEntity
+  8
+0
+  100
+AcDb2dPolyline
+`
+    for (let pointindex = 0; pointindex < numpointsClosed; pointindex++) {
+      let pointindexwrapped = pointindex
+      if (pointindexwrapped >= path.points.length) pointindexwrapped -= path.points.length
+      let point = path.points[pointindexwrapped]
+      str += `  0
+VERTEX
+  5
+${getEntityId()}
+  100
+AcDbEntity
+  8
+0
+  100
+AcDbVertex
+  100
+AcDb2dVertex
+ 10
+${point.x}
+ 20
+${point.y}
+`
+    }
+    str += `  0
+SEQEND
+  5
+${getEntityId()}
+  100
+AcDbEntity
+`
+    options.statusCallback && options.statusCallback({progress: 100 * i / paths.length})
+  })
+  options.statusCallback && options.statusCallback({progress: 100})
+  return [str]
+}
+
+//
+// convert the given CSG to DXF 3D face entities
+// @return array of strings
+//
+const PolygonsTo3DFaces = function (csg, options) {
+  options.statusCallback && options.statusCallback({progress: 0})
+  let str = ''
+  csg.polygons.map(function (polygon, i) {
+    let triangles = polygonToTriangles(polygon)
+    triangles.map(function (triangle, i) {
+      str += triangleTo3DFaces(triangle, options)
+    })
+  })
+  options.statusCallback && options.statusCallback({progress: 100})
+  return [str]
+}
+
+//
+// convert the given polygon to triangles
+//
+// NOTE: This only works for CONVEX polygons
+const polygonToTriangles = (polygon) => {
+  let length = polygon.vertices.length - 2
+  if (length < 1) return []
+
+  let pivot = polygon.vertices[0]
+  let triangles = []
+  for (let i = 0; i < length; i++) {
+    triangles.push([pivot, polygon.vertices[i + 1], polygon.vertices[i + 2]])
+  }
+  return triangles
+}
+
+//
+// convert the given triangle to DXF 3D face entity
+//
+const triangleTo3DFaces = (triangle, options) => {
+  let corner10 = triangle[0].pos
+  let corner11 = triangle[1].pos
+  let corner12 = triangle[2].pos
+  let corner13 = triangle[2].pos // same in DXF
+  let str = `  0
+3DFACE
+  5
+${getEntityId()}
+  100
+AcDbEntity
+  8
+0
+  100
+AcDbFace
+  70
+0
+  10
+${corner10.x}
+  20
+${corner10.y}
+  30
+${corner10.z}
+  11
+${corner11.x}
+  21
+${corner11.y}
+  31
+${corner11.z}
+  12
+${corner12.x}
+  22
+${corner12.y}
+  32
+${corner12.z}
+  13
+${corner13.x}
+  23
+${corner13.y}
+  33
+${corner13.z}
+`
+  return str
+}
+
+// convert the given CSG to DXF POLYLINE (polyface mesh)
+// FIXME The entity types are wrong, resulting in imterpretation as a 3D lines, not faces
+// @return array of strings
+const PolygonsToPolyline = function (csg, options) {
+  options.statusCallback && options.statusCallback({progress: 100})
+  options.statusCallback && options.statusCallback({progress: 0})
+  let str = ''
+  let mesh = polygons2polyfaces(csg.polygons)
+  if (mesh.faces.length > 0) {
+    str += `  0
+POLYLINE
+  5
+${getEntityId()}
+  100
+AcDbEntity
+  8
+0
+  100
+AcDb3dPolyline
+  70
+64
+  71
+${mesh.vertices.length}
+  72
+${mesh.faces.length}
+`
+    mesh.vertices.forEach(function (vertex) {
+      str += `  0
+VERTEX
+  5
+${getEntityId()}
+  100
+AcDbEntity
+  8
+0
+  100
+AcDbVertex
+  100
+AcDb3dPolylineVertex
+  10
+${vertex[0]}
+  20
+${vertex[1]}
+  30
+${vertex[2]}
+  70
+192
+`
+    })
+    mesh.faces.forEach(function (face) {
+      str += `  0
+VERTEX
+  5
+${getEntityId()}
+  100
+AcDbEntity
+  8
+0
+  100
+AcDbVertex
+  100
+AcDb3dPolylineVertex
+  10
+0
+  20
+0
+  30
+0
+  70
+128
+  71
+${face[0]}
+  72
+${face[1]}
+  73
+${face[2]}
+  74
+${face[3]}
+`
+    })
+  }
+  return [str]
+}
+
+// convert the given polygons (CSG) to polyfaces (DXF)
+// @return array of faces, array of vertices
+const polygons2polyfaces = function (polygons) {
+  var faces = []
+  var vertices = []
+  for (var i = 0; i < polygons.length; ++i) {
+    let polygon = polygons[i]
+    var face = []
+    for (var j = 0; j < polygon.vertices.length; ++j) {
+      var vv = polygon.vertices[j].pos
+      vertices.push([vv.x, vv.y, vv.z])
+      face.push(vertices.length)
+    }
+    while (face.length < 4) { face.push(0) }
+    faces.push(face)
+  }
+  return {faces: faces, vertices: vertices}
+}
+
+// get a unique id for a DXF entity
+// @return unique id string
+var entityId = 0
+
+function getEntityId () {
+  entityId++
+  // add more zeros if the id needs to be larger
+  let padded = '00000' + entityId.toString(16).toUpperCase()
+  return 'CAD' + padded.substr(padded.length - 5)
+}
+
+// convert the given data to array if not already
+// @return array of data
+function toArray (data) {
+  if (Array.isArray(data)) return data
+  return [data]
+}
+
+// determin if the given object is a Path2D object
+// NOTE: Can be removed once CSG provides this functionality
+// @return true or false
+function isPath (object) {
+  if (object && 'points' in object && Array.isArray(object.points)) {
+    return true
+  }
+  return false
 }
 
 module.exports = {
@@ -11817,13 +18134,14 @@ module.exports = {
   mimeType
 }
 
-},{}],70:[function(require,module,exports){
+},{"./autocad_AC2017":83,"@jscad/csg":18,"@jscad/io-utils":88}],85:[function(require,module,exports){
 
-function deserialize (gcode, fn, options) {
+function deserialize (gcode, filename, options) {
+  options && options.statusCallback && options.statusCallback({progress: 0})
   // http://reprap.org/wiki/G-code
-  const defaults = {version: '0.0.0'}
+  const defaults = {version: '0.0.0', addMetaData: true, output: 'jscad'}
   options = Object.assign({}, defaults, options)
-  const {version} = options
+  const {version, output, addMetaData} = options
   // just as experiment ...
   var l = gcode.split(/[\n]/) // for now just GCODE ASCII
   var srci = ''
@@ -11903,26 +18221,33 @@ function deserialize (gcode, fn, options) {
       lpos.E = pos.E
     }
     ld = d
+    options && options.statusCallback && options.statusCallback({progress: 100 * i / l.length})
   }
 
-  var src = ''
-  src += '// producer: OpenJSCAD Compatibility (' + version + ') GCode Importer\n'
-  src += '// date: ' + (new Date()) + '\n'
-  src += '// source: ' + fn + '\n'
-  src += '\n'
+  let code = addMetaData ? `//
+  // producer: OpenJSCAD.org Compatibility${version} GCode deserializer
+  // date: ${new Date()}
+  // source: ${filename}
+  //
+  ` : ''
+  code += `// layers: ${layers}
+  function main() {\n\tvar EX = function(p,opt) { return rectangular_extrude(p,opt); }\n\treturn [
+    ${srci}
+  }
+}
+  `
   // if(err) src += "// WARNING: import errors: "+err+" (some triangles might be misaligned or missing)\n";
-  src += '// layers: ' + layers + '\n'
-  src += 'function main() {\n\tvar EX = function(p,opt) { return rectangular_extrude(p,opt); }\n\treturn ['
-  src += srci
-  src += '\n\t];\n}\n'
-  return src
+
+  options && options.statusCallback && options.statusCallback({progress: 100})
+  
+  return code
 }
 
 module.exports = {
   deserialize
 }
 
-},{}],71:[function(require,module,exports){
+},{}],86:[function(require,module,exports){
 // BinaryReader
 // Refactored by Vjeux <vjeuxx@gmail.com>
 // http://blog.vjeux.com/2010/javascript/javascript-binary-reader.html
@@ -12048,7 +18373,7 @@ BinaryReader.prototype = {
 
 module.exports = BinaryReader
 
-},{}],72:[function(require,module,exports){
+},{}],87:[function(require,module,exports){
 /**
  * wrapper around internal csg methods (in case they change) to make sure
  * it resuts in a manifold mesh
@@ -12068,13 +18393,13 @@ function ensureManifoldness (input) {
 
 module.exports = ensureManifoldness
 
-},{}],73:[function(require,module,exports){
+},{}],88:[function(require,module,exports){
 const makeBlob = require('./makeBlob')
 const BinaryReader = require('./BinaryReader')
 const ensureManifoldness = require('./ensureManifoldness')
 module.exports = {makeBlob, BinaryReader, ensureManifoldness}
 
-},{"./BinaryReader":71,"./ensureManifoldness":72,"./makeBlob":74}],74:[function(require,module,exports){
+},{"./BinaryReader":86,"./ensureManifoldness":87,"./makeBlob":89}],89:[function(require,module,exports){
 (function (Buffer){
 /*
  * Blob.js
@@ -12192,7 +18517,7 @@ Blob.prototype = {
 module.exports = makeBlob
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":111}],75:[function(require,module,exports){
+},{"buffer":127}],90:[function(require,module,exports){
 const {makeBlob} = require('@jscad/io-utils')
 
 const amfSerializer = require('@jscad/amf-serializer')
@@ -12203,6 +18528,7 @@ const svgSerializer = require('@jscad/svg-serializer')
 const x3dSerializer = require('@jscad/x3d-serializer')
 
 const amfDeSerializer = require('@jscad/amf-deserializer')
+const dxfDeSerializer = require('@jscad/dxf-deserializer')
 const gcodeDeSerializer = require('@jscad/gcode-deserializer')
 const jsonDeSerializer = require('@jscad/json-deserializer')
 const objDeSerializer = require('@jscad/obj-deserializer')
@@ -12219,6 +18545,7 @@ module.exports = {
   x3dSerializer,
 
   amfDeSerializer,
+  dxfDeSerializer,
   gcodeDeSerializer,
   jsonDeSerializer,
   objDeSerializer,
@@ -12245,7 +18572,7 @@ export {parseOBJ} from './deserializers/parseOBJ'
 export {parseSTL} from './deserializers/parseSTL'
 export {parseSVG} from './deserializers/parseSVG' */
 
-},{"@jscad/amf-deserializer":9,"@jscad/amf-serializer":10,"@jscad/dxf-serializer":69,"@jscad/gcode-deserializer":70,"@jscad/io-utils":73,"@jscad/json-deserializer":76,"@jscad/json-serializer":77,"@jscad/obj-deserializer":78,"@jscad/stl-deserializer":80,"@jscad/stl-serializer":84,"@jscad/svg-deserializer":87,"@jscad/svg-serializer":91,"@jscad/x3d-serializer":92}],76:[function(require,module,exports){
+},{"@jscad/amf-deserializer":12,"@jscad/amf-serializer":16,"@jscad/dxf-deserializer":80,"@jscad/dxf-serializer":84,"@jscad/gcode-deserializer":85,"@jscad/io-utils":88,"@jscad/json-deserializer":91,"@jscad/json-serializer":92,"@jscad/obj-deserializer":93,"@jscad/stl-deserializer":95,"@jscad/stl-serializer":99,"@jscad/svg-deserializer":102,"@jscad/svg-serializer":106,"@jscad/x3d-serializer":107}],91:[function(require,module,exports){
 /*
 ## License
 
@@ -12330,6 +18657,7 @@ function toSource (obj) {
 // fn (optional) original filename of JSON source
 //
 function deserialize (src, fn, options) {
+  options && options.statusCallback && options.statusCallback({progress: 0})
   fn = fn || 'amf'
   const defaults = {version: '0.0.0'}
   options = Object.assign({}, defaults, options)
@@ -12337,6 +18665,7 @@ function deserialize (src, fn, options) {
 
   // convert the JSON into an anonymous object
   var obj = JSON.parse(src)
+  options && options.statusCallback && options.statusCallback({progress: 50})
   // convert the internal objects to JSCAD code
   var code = ''
   code += '//\n'
@@ -12347,6 +18676,7 @@ function deserialize (src, fn, options) {
   code += 'function main() {\n'
   code += toSource(obj)
   code += '};\n'
+  options && options.statusCallback && options.statusCallback({progress: 100})
   return code
 };
 
@@ -12354,33 +18684,35 @@ module.exports = {
   deserialize
 }
 
-},{"@jscad/csg":12}],77:[function(require,module,exports){
+},{"@jscad/csg":18}],92:[function(require,module,exports){
 const { ensureManifoldness } = require('@jscad/io-utils')
 
 const mimeType = 'application/json'
 
-function fromCAG (CAG) {
+function fromCAG (CAG, options) {
   let str = '{ "type": "cag","sides": ['
   let comma = ''
   CAG.sides.map(
-    function (side) {
+    function (side, i) {
       str += comma
       str += JSON.stringify(side)
       comma = ','
+      options && options.statusCallback && options.statusCallback({progress: 100 * i / CAG.sides.length})
     }
   )
   str += '] }'
   return [str]
 }
 
-function fromCSG (CSG) {
+function fromCSG (CSG, options) {
   let str = '{ "type": "csg","polygons": ['
   let comma = ''
   CSG.polygons.map(
-    function (polygon) {
+    function (polygon, i) {
       str += comma
       str += JSON.stringify(polygon)
       comma = ','
+      options && options.statusCallback && options.statusCallback({progress: 100 * i / CSG.polygons.length})
     }
   )
   str += '],'
@@ -12391,7 +18723,10 @@ function fromCSG (CSG) {
 }
 
 function serialize (data, options) {
-  return 'sides' in data ? fromCAG(data) : fromCSG(ensureManifoldness(data))
+  options && options.statusCallback && options.statusCallback({progress: 0})
+  const result = 'sides' in data ? fromCAG(data, options) : fromCSG(ensureManifoldness(data), options)
+  options && options.statusCallback && options.statusCallback({progress: 100})
+  return result
 }
 
 module.exports = {
@@ -12399,33 +18734,52 @@ module.exports = {
   mimeType
 }
 
-},{"@jscad/io-utils":73}],78:[function(require,module,exports){
+},{"@jscad/io-utils":88}],93:[function(require,module,exports){
 const { vt2jscad } = require('./vt2jscad')
+const {CSG} = require('@jscad/csg')
 
-function deserialize (obj, fn, options) { // http://en.wikipedia.org/wiki/Wavefront_.obj_file
-  const defaults = {version: '0.0.0'}
+/**
+ * Parse the given obj data and return either a JSCAD script or a CSG/CAG object
+ * @param  {string} input obj data
+ * @param {string} filename (optional) original filename of AMF source
+ * @param {object} options options (optional) anonymous object with:
+ * @param {string} [options.version='0.0.0'] version number to add to the metadata
+ * @param {boolean} [options.addMetadata=true] toggle injection of metadata (producer, date, source) at the start of the file
+ * @param {string} [options.output='jscad'] {String} either jscad or csg to set desired output
+ * @return {CSG/string} either a CAG/CSG object or a string (jscad script)
+ */
+function deserialize (input, filename, options) { // http://en.wikipedia.org/wiki/Wavefront_.obj_file
+  options && options.statusCallback && options.statusCallback({progress: 0})
+  const defaults = {version: '0.0.0', addMetaData: true, output: 'jscad'}
   options = Object.assign({}, defaults, options)
-  const {version} = options
+  const {output} = options
 
-  var l = obj.split(/\n/)
-  var v = []
-  var f = []
+  const {positions, faces} = getPositionsAndFaces(input, options)
+  const result = output === 'jscad' ? stringify({positions, faces, options}) : objectify({positions, faces, options})
+  options && options.statusCallback && options.statusCallback({progress: 100})
+  return result
+}
 
-  for (var i = 0; i < l.length; i++) {
-    var s = l[i]
-    var a = s.split(/\s+/)
+const getPositionsAndFaces = (data, options) => {
+  let lines = data.split(/\n/)
+  let positions = []
+  let faces = []
+
+  for (let i = 0; i < lines.length; i++) {
+    let s = lines[i]
+    let a = s.split(/\s+/)
 
     if (a[0] === 'v') {
-      v.push([a[1], a[2], a[3]])
+      positions.push([a[1], a[2], a[3]])
     } else if (a[0] === 'f') {
-      var fc = []
-      var skip = 0
+      let fc = []
+      let skip = 0
 
-      for (var j = 1; j < a.length; j++) {
-        var c = a[j]
+      for (let j = 1; j < a.length; j++) {
+        let c = a[j]
         c = c.replace(/\/.*$/, '') // -- if coord# is '840/840' -> 840
         c-- // -- starts with 1, but we start with 0
-        if (c >= v.length) {
+        if (c >= positions.length) {
           skip++
         }
         if (skip === 0) {
@@ -12434,48 +18788,60 @@ function deserialize (obj, fn, options) { // http://en.wikipedia.org/wiki/Wavefr
       }
          // fc.reverse();
       if (skip === 0) {
-        f.push(fc)
+        faces.push(fc)
       }
     } else {
       // vn vt and all others disregarded
     }
+    options && options.statusCallback && options.statusCallback({progress: 90 * i / lines.length})  //getPositionsAndFaces is 90% of total
   }
-  var src = ''
-  src += '// producer: OpenJSCAD Compatibility (' + version + ') Wavefront OBJ Importer\n'
-  src += '// date: ' + (new Date()) + '\n'
-  src += '// source: ' + fn + '\n'
-  src += '\n'
+  return {positions, faces}
+}
+
+const objectify = ({positions, faces}) => {
+  return CSG.polyhedron({points: positions, faces})
+}
+
+const stringify = ({positions, faces, addMetaData, filename, version}) => {
+  let code = addMetaData ? `//
+  // producer: OpenJSCAD.org Compatibility${version} OBJ deserializer
+  // date: ${new Date()}
+  // source: ${filename}
+  //
+  ` : ''
   // if(err) src += "// WARNING: import errors: "+err+" (some triangles might be misaligned or missing)\n";
-  src += '// objects: 1\n// object #1: polygons: ' + f.length + '\n\n'
-  src += 'function main() { return '
-  src += vt2jscad(v, f)
-  src += '; }'
-  return src
+  code += `// objects: 1
+// object #1: polygons: ${faces.length}
+function main() { return
+${vt2jscad(positions, faces)}
+}
+  `
+  return code
 }
 
 module.exports = {
   deserialize
 }
 
-},{"./vt2jscad":79}],79:[function(require,module,exports){
-// vertices, triangles, normals and colors
-function vt2jscad (v, t, n, c) {
+},{"./vt2jscad":94,"@jscad/csg":18}],94:[function(require,module,exports){
+// positions, triangles, normals and colors
+function vt2jscad (positions, triangles, normals, colors) {
   let src = ''
-  src += 'polyhedron({ points: [\n\t'
-  for (let i = 0, j = 0; i < v.length; i++) {
-    if (j++) src += ',\n\t'
-    src += '[' + v[i] + ']' // .join(", ");
+  src += 'polyhedron({ points: [\n  '
+  for (let i = 0, j = 0; i < positions.length; i++) {
+    if (j++) src += ',\n  '
+    src += '[' + positions[i] + ']' // .join(", ");
   }
-  src += '],\n\tpolygons: [\n\t'
-  for (let i = 0, j = 0; i < t.length; i++) {
-    if (j++) src += ',\n\t'
-    src += '[' + t[i] + ']' // .join(', ');
+  src += '],\n  polygons: [\n  '
+  for (let i = 0, j = 0; i < triangles.length; i++) {
+    if (j++) src += ',\n  '
+    src += '[' + triangles[i] + ']' // .join(', ');
   }
-  if (c && t.length === c.length) {
-    src += '],\n\tcolors: [\n\t'
-    for (let i = 0, j = 0; i < c.length; i++) {
-      if (j++) src += ',\n\t'
-      src += '[' + c[i] + ']' // .join(', ');
+  if (colors && triangles.length === colors.length) {
+    src += '],\n\tcolors: [\n  '
+    for (let i = 0, j = 0; i < colors.length; i++) {
+      if (j++) src += ',\n  '
+      src += '[' + colors[i] + ']' // .join(', ');
     }
   }
   src += '] })\n'
@@ -12486,7 +18852,7 @@ module.exports = {
   vt2jscad
 }
 
-},{}],80:[function(require,module,exports){
+},{}],95:[function(require,module,exports){
 const { CSG } = require('@jscad/csg')
 const { vt2jscad } = require('./vt2jscad')
 const { BinaryReader } = require('@jscad/io-utils')
@@ -12500,7 +18866,18 @@ const { BinaryReader } = require('@jscad/io-utils')
 // 2013/03/18: renamed functions, creating .jscad source direct via polyhedron()
 const echo = console.info
 
+/**
+* Parse the given stl data and return either a JSCAD script or a CSG/CAG object
+* @param {string} input stl data
+* @param {string} filename (optional) original filename of AMF source
+* @param {object} options options (optional) anonymous object with:
+* @param {string} [options.version='0.0.0'] version number to add to the metadata
+* @param {boolean} [options.addMetadata=true] toggle injection of metadata (producer, date, source) at the start of the file
+* @param {string} [options.output='jscad'] {String} either jscad or csg to set desired output
+* @return {CSG/string} either a CAG/CSG object or a string (jscad script)
+*/
 function deserialize (stl, filename, options) {
+  options && options.statusCallback && options.statusCallback({progress: 0})
   const defaults = {version: '0.0.0', addMetaData: true, output: 'jscad'}
   options = Object.assign({}, defaults, options)
   const {version, output, addMetaData} = options
@@ -12509,14 +18886,21 @@ function deserialize (stl, filename, options) {
 
   stl = isBinary && isBuffer(stl) ? bufferToBinaryString(stl) : stl
 
+  options && options.statusCallback && options.statusCallback({progress: 33})
+
   const elementFormatterJscad = ({vertices, triangles, normals, colors, index}) => `// object #${index}: triangles: ${triangles.length}\n${vt2jscad(vertices, triangles, null)}`
   const elementFormatterCSG = ({vertices, triangles, normals, colors}) => polyhedron({ points: vertices, polygons: triangles })
 
+  options && options.statusCallback && options.statusCallback({progress: 66})
+  
   const deserializer = isBinary ? deserializeBinarySTL : deserializeAsciiSTL
   const elementFormatter = output === 'jscad' ? elementFormatterJscad : elementFormatterCSG
   const outputFormatter = output === 'jscad' ? formatAsJscad : formatAsCsg
 
-  return outputFormatter(deserializer(stl, filename, version, elementFormatter), addMetaData, version, filename)
+  const result = outputFormatter(deserializer(stl, filename, version, elementFormatter), addMetaData, version, filename)
+  
+  options && options.statusCallback && options.statusCallback({progress: 100})
+  return result
 
   /*
   if (err) src += '// WARNING: import errors: ' + err + ' (some triangles might be misaligned or missing)\n'
@@ -12866,43 +19250,19 @@ module.exports = {
   deserialize
 }
 
-},{"./vt2jscad":81,"@jscad/csg":12,"@jscad/io-utils":73}],81:[function(require,module,exports){
-// vertices, triangles, normals and colors
-function vt2jscad (vertices, triangles, normals, colors) {
-  let src = ''
-  src += 'polyhedron({ points: [\n\t'
-  for (let i = 0, j = 0; i < vertices.length; i++) {
-    if (j++) src += ',\n\t'
-    src += '[' + vertices[i] + ']' // .join(", ");
-  }
-  src += '],\n\tpolygons: [\n\t'
-  for (let i = 0, j = 0; i < triangles.length; i++) {
-    if (j++) src += ',\n\t'
-    src += '[' + triangles[i] + ']' // .join(', ');
-  }
-  if (colors && triangles.length === colors.length) {
-    src += '],\n\tcolors: [\n\t'
-    for (let i = 0, j = 0; i < colors.length; i++) {
-      if (j++) src += ',\n\t'
-      src += '[' + colors[i] + ']' // .join(', ');
-    }
-  }
-  src += '] })\n'
-  return src
-}
+},{"./vt2jscad":96,"@jscad/csg":18,"@jscad/io-utils":88}],96:[function(require,module,exports){
+arguments[4][94][0].apply(exports,arguments)
+},{"dup":94}],97:[function(require,module,exports){
 
-module.exports = {
-  vt2jscad
-}
-
-},{}],82:[function(require,module,exports){
-
-function serialize (CSG) {
+function serialize (CSG, options) {
+  options && options.statusCallback && options.statusCallback({progress: 0})
   var result = 'solid csg.js\n'
-  CSG.polygons.map(function (p) {
+  CSG.polygons.map(function (p, i) {
     result += CSGPolygontoStlString(p)
+    options && options.statusCallback && options.statusCallback({progress: 100 * i / CSG.polygons.length})
   })
   result += 'endsolid csg.js\n'
+  options && options.statusCallback && options.statusCallback({progress: 100})
   return [result]
 }
 
@@ -12935,10 +19295,11 @@ module.exports = {
   serialize
 }
 
-},{}],83:[function(require,module,exports){
+},{}],98:[function(require,module,exports){
 
 // see http://en.wikipedia.org/wiki/STL_%28file_format%29#Binary_STL
-function serialize (CSG) {
+function serialize (CSG, options) {
+  options && options.statusCallback && options.statusCallback({progress: 0})  
   // first check if the host is little-endian:
   var buffer = new ArrayBuffer(4)
   var int32buffer = new Int32Array(buffer, 0, 1)
@@ -12973,7 +19334,7 @@ function serialize (CSG) {
   // and one uint16:
   var triangleUint16array = new Uint16Array(triangleBuffer, 48, 1)
   var byteoffset = 0
-  CSG.polygons.map(function (p) {
+  CSG.polygons.map(function (p, i) {
     var numvertices = p.vertices.length
     for (var i = 0; i < numvertices - 2; i++) {
       var normal = p.plane.normal
@@ -12993,7 +19354,9 @@ function serialize (CSG) {
       allTrianglesBufferAsInt8.set(triangleBufferAsInt8, byteoffset)
       byteoffset += 50
     }
+    options && options.statusCallback && options.statusCallback({progress: 100 * i / CSG.polygons.length})
   })
+  options && options.statusCallback && options.statusCallback({progress: 100})
   return [headerarray.buffer, ar1.buffer, allTrianglesBuffer]// 'blobable array'
   /* return new Blob([headerarray.buffer, ar1.buffer, allTrianglesBuffer], {
     type: mimeType
@@ -13004,7 +19367,7 @@ module.exports = {
   serialize
 }
 
-},{}],84:[function(require,module,exports){
+},{}],99:[function(require,module,exports){
 const binarySerializer = require('./CSGToStlb').serialize
 const asciiSerializer = require('./CSGToStla').serialize
 const { ensureManifoldness } = require('@jscad/io-utils')
@@ -13026,7 +19389,7 @@ module.exports = {
   serialize
 }
 
-},{"./CSGToStla":82,"./CSGToStlb":83,"@jscad/io-utils":73}],85:[function(require,module,exports){
+},{"./CSGToStla":97,"./CSGToStlb":98,"@jscad/io-utils":88}],100:[function(require,module,exports){
 // units for converting CSS2 points/length, i.e. CSS2 value / pxPmm
 const pxPmm = 1 / 0.2822222 // used for scaling SVG coordinates(PX) to CAG coordinates(MM)
 const inchMM = 1 / (1 / 0.039370) // used for scaling SVG coordinates(IN) to CAG coordinates(MM)
@@ -13194,7 +19557,7 @@ module.exports = {
   svgColors
 }
 
-},{}],86:[function(require,module,exports){
+},{}],101:[function(require,module,exports){
 const {inchMM, ptMM, pcMM, svgColors} = require('./constants')
 
 // Calculate the CAG length/size from the given SVG value (float)
@@ -13335,7 +19698,7 @@ const cssStyle = function (element, name) {
     if (v !== null) {
       v = v[0]
       var i = v.length
-      while (v[i] !== ' ') i--
+      while (v[i] !== ' ' && i > 0) i--
       v = v.slice(i + 1, v.length - 1)
       return v
     }
@@ -13378,7 +19741,7 @@ module.exports = {
   groupValue
 }
 
-},{"./constants":85}],87:[function(require,module,exports){
+},{"./constants":100}],102:[function(require,module,exports){
 /*
 ## License
 
@@ -13398,6 +19761,99 @@ const {cagLengthX, cagLengthY} = require('./helpers')
 const {svgSvg, svgRect, svgCircle, svgGroup, svgLine, svgPath, svgEllipse, svgPolygon, svgPolyline, svgUse} = require('./svgElementHelpers')
 const shapesMapCsg = require('./shapesMapCsg')
 const shapesMapJscad = require('./shapesMapJscad')
+
+/**
+* Parse the given svg data and return either a JSCAD script or a CSG/CAG object
+* @param {string} input svg data
+* @param {string} filename (optional) original filename of AMF source
+* @param {object} options options (optional) anonymous object with:
+* @param {string} [options.version='0.0.0'] version number to add to the metadata
+* @param {boolean} [options.addMetadata=true] toggle injection of metadata (producer, date, source) at the start of the file
+* @param {string} [options.output='jscad'] {String} either jscad or csg to set desired output
+* @param {float} [options.pxPmm] custom pixels per mm unit
+* @return {CSG/string} either a CAG/CSG object or a string (jscad script)
+*/
+const deserialize = function (input, filename, options) {
+  const defaults = {
+    output: 'jscad'
+  }
+  options = Object.assign({}, defaults, options)
+  return options.output === 'jscad' ? translate(input, filename, options) : deserializeToCSG(input, filename, options)
+}
+
+/**
+ * Parse the given SVG source and return a JSCAD script
+ * @param  {string} src svg data as text
+ * @param  {string} filename (optional) original filename of SVG source
+ * @param  {object} options options (optional) anonymous object with:
+ *  pxPmm {number: pixels per milimeter for calcuations
+ *  version: {string} version number to add to the metadata
+ *  addMetadata: {boolean} flag to enable/disable injection of metadata (producer, date, source)
+ *
+ * @return a CAG (2D CSG) object
+ */
+function deserializeToCSG (src, filename, options) {
+  options && options.statusCallback && options.statusCallback({progress: 0})
+  filename = filename || 'svg'
+  const defaults = {pxPmm: require('./constants').pxPmm, version: '0.0.0', addMetaData: true}
+  options = Object.assign({}, defaults, options)
+  const {pxPmm} = options
+
+  // parse the SVG source
+  createSvgParser(src, pxPmm)
+  if (!svgObj) {
+    throw new Error('SVG parsing failed, no valid svg data retrieved')
+  }
+
+  options && options.statusCallback && options.statusCallback({progress: 50})
+  
+  const result = objectify(svgObj)
+
+  options && options.statusCallback && options.statusCallback({progress: 100})
+  return result
+}
+
+/**
+ * Parse the given SVG source and return a JSCAD script
+ * @param  {string} src svg data as text
+ * @param  {string} filename (optional) original filename of SVG source
+ * @param  {object} options options (optional) anonymous object with:
+ *  pxPmm {number: pixels per milimeter for calcuations
+ *  version: {string} version number to add to the metadata
+ *  addMetadata: {boolean} flag to enable/disable injection of metadata (producer, date, source)
+ *    at the start of the file
+ * @return a CAG (2D CSG) object
+ */
+function translate (src, filename, options) {
+  options && options.statusCallback && options.statusCallback({progress: 0})
+  filename = filename || 'svg'
+  const defaults = {pxPmm: require('./constants').pxPmm, version: '0.0.0', addMetaData: true}
+  options = Object.assign({}, defaults, options)
+  const {version, pxPmm, addMetaData} = options
+
+  // parse the SVG source
+  createSvgParser(src, pxPmm)
+  // convert the internal objects to JSCAD code
+  let code = addMetaData ? `//
+  // producer: OpenJSCAD.org ${version} SVG Importer
+  // date: ${new Date()}
+  // source: ${filename}
+  //
+  ` : ''
+
+  if (!svgObj) {
+    throw new Error('SVG parsing failed, no valid svg data retrieved')
+  }
+
+  options && options.statusCallback && options.statusCallback({progress: 50})
+  
+  const scadCode = codify(svgObj)
+  code += scadCode
+
+  options && options.statusCallback && options.statusCallback({progress: 100})
+  return code
+}
+
 // FIXE: should these be kept here ? any risk of side effects ?
 let svgUnitsX
 let svgUnitsY
@@ -13441,9 +19897,9 @@ const objectify = function (group) {
     if ('transforms' in obj) {
       // NOTE: SVG specifications require that transforms are applied in the order given.
       // But these are applied in the order as required by CSG/CAG
-      let tr
-      let ts
-      let tt
+      let tr = null
+      let ts = null
+      let tt = null
 
       for (let j = 0; j < obj.transforms.length; j++) {
         const t = obj.transforms[j]
@@ -13521,9 +19977,9 @@ const codify = function (group) {
     if ('transforms' in obj) {
       // NOTE: SVG specifications require that transforms are applied in the order given.
       //       But these are applied in the order as required by CSG/CAG
-      let tr
-      let ts
-      let tt
+      let tr = null;
+      let ts = null;
+      let tt = null;
 
       for (let j = 0; j < obj.transforms.length; j++) {
         var t = obj.transforms[j]
@@ -13531,17 +19987,17 @@ const codify = function (group) {
         if ('scale' in t) { ts = t }
         if ('translate' in t) { tt = t }
       }
-      if (ts !== null && ts !== undefined) {
+      if (ts !== null) {
         const x = ts.scale[0]
         const y = ts.scale[1]
         code += indent + on + ' = ' + on + '.scale([' + x + ',' + y + ']);\n'
       }
-      if (tr !== null && tr !== undefined) {
+      if (tr !== null) {
         console.log('tr', tr)
         const z = 0 - tr.rotate
         code += indent + on + ' = ' + on + '.rotateZ(' + z + ');\n'
       }
-      if (tt !== null && tt !== undefined) {
+      if (tt !== null) {
         const x = cagLengthX(tt.translate[0], svgUnitsPmm, svgUnitsX)
         const y = (0 - cagLengthY(tt.translate[1], svgUnitsPmm, svgUnitsY))
         code += indent + on + ' = ' + on + '.translate([' + x + ',' + y + ']);\n'
@@ -13582,7 +20038,7 @@ function createSvgParser (src, pxPmm) {
       POLYGON: svgPolygon,
       PATH: svgPath,
       USE: svgUse,
-      DEFS: () => { svgInDefs = true },
+      DEFS: () => { svgInDefs = true; return null; },
       DESC: () => undefined, // ignored by design
       TITLE: () => undefined, // ignored by design
       STYLE: () => undefined, // ignored by design
@@ -13659,80 +20115,9 @@ function createSvgParser (src, pxPmm) {
   return parser
 }
 
-/**
- * Parse the given SVG source and return a JSCAD script
- * @param  {string} src svg data as text
- * @param  {string} filename (optional) original filename of SVG source
- * @param  {object} options options (optional) anonymous object with:
- *  pxPmm {number: pixels per milimeter for calcuations
- *  version: {string} version number to add to the metadata
- *  addMetadata: {boolean} flag to enable/disable injection of metadata (producer, date, source)
- *
- * @return a CAG (2D CSG) object
- */
-function deserializeToCSG (src, filename, options) {
-  filename = filename || 'svg'
-  const defaults = {pxPmm: require('./constants').pxPmm, version: '0.0.0', addMetaData: true}
-  options = Object.assign({}, defaults, options)
-  const {pxPmm} = options
-
-  // parse the SVG source
-  createSvgParser(src, pxPmm)
-  if (!svgObj) {
-    throw new Error('SVG parsing failed, no valid svg data retrieved')
-  }
-
-  return objectify(svgObj)
-}
-
-/**
- * Parse the given SVG source and return a JSCAD script
- * @param  {string} src svg data as text
- * @param  {string} filename (optional) original filename of SVG source
- * @param  {object} options options (optional) anonymous object with:
- *  pxPmm {number: pixels per milimeter for calcuations
- *  version: {string} version number to add to the metadata
- *  addMetadata: {boolean} flag to enable/disable injection of metadata (producer, date, source)
- *    at the start of the file
- * @return a CAG (2D CSG) object
- */
-function translate (src, filename, options) {
-  filename = filename || 'svg'
-  const defaults = {pxPmm: require('./constants').pxPmm, version: '0.0.0', addMetaData: true}
-  options = Object.assign({}, defaults, options)
-  const {version, pxPmm, addMetaData} = options
-
-  // parse the SVG source
-  createSvgParser(src, pxPmm)
-  // convert the internal objects to JSCAD code
-  let code = addMetaData ? `//
-  // producer: OpenJSCAD.org ${version} SVG Importer
-  // date: ${new Date()}
-  // source: ${filename}
-  //
-  ` : ''
-
-  if (!svgObj) {
-    throw new Error('SVG parsing failed, no valid svg data retrieved')
-  }
-
-  const scadCode = codify(svgObj)
-  code += scadCode
-
-  return code
-}
-
-const deserialize = function (src, filename, options) {
-  const defaults = {
-    output: 'jscad'
-  }
-  options = Object.assign({}, defaults, options)
-  return options.output === 'jscad' ? translate(src, filename, options) : deserializeToCSG(src, filename, options)
-}
-
 module.exports = {deserialize}
 
-},{"./constants":85,"./helpers":86,"./shapesMapCsg":88,"./shapesMapJscad":89,"./svgElementHelpers":90,"@jscad/csg":12,"sax":97}],88:[function(require,module,exports){
+},{"./constants":100,"./helpers":101,"./shapesMapCsg":103,"./shapesMapJscad":104,"./svgElementHelpers":105,"@jscad/csg":18,"sax":113}],103:[function(require,module,exports){
 const {CSG, CAG} = require('@jscad/csg')
 const {svg2cagX, svg2cagY, cagLengthX, cagLengthY, cagLengthP, reflect, groupValue} = require('./helpers')
 const {cssPxUnit} = require('./constants')
@@ -13886,7 +20271,7 @@ function path (obj, svgUnitsPmm, svgUnitsX, svgUnitsY, svgUnitsV, svgGroups) {
         }
         // close the previous path
         if (pi > 0 && pc === false) {
-          paths[pathName].expandToCAG(CSG.defaultResolution2D)
+          paths[pathName] =  paths[pathName].expandToCAG(CSG.defaultResolution2D)
           // code += indent + pathName + ' = ' + pathName + '.expandToCAG(' + r + ',CSG.defaultResolution2D);\n'
         }
         // open a new path
@@ -13903,7 +20288,7 @@ function path (obj, svgUnitsPmm, svgUnitsX, svgUnitsY, svgUnitsV, svgGroups) {
         while (pts.length >= 2) {
           cx = cx + parseFloat(pts.shift())
           cy = cy + parseFloat(pts.shift())
-          paths[pathName].appendPoint([svg2cagX(cx, svgUnitsPmm), svg2cagY(cy, svgUnitsPmm)])
+          paths[pathName] = paths[pathName].appendPoint([svg2cagX(cx, svgUnitsPmm), svg2cagY(cy, svgUnitsPmm)])
         }
         break
       case 'M': // absolute move to X,Y
@@ -13925,7 +20310,7 @@ function path (obj, svgUnitsPmm, svgUnitsX, svgUnitsY, svgUnitsV, svgGroups) {
         while (pts.length >= 2) {
           cx = parseFloat(pts.shift())
           cy = parseFloat(pts.shift())
-          paths[pathName].appendPoint([svg2cagX(cx, svgUnitsPmm), svg2cagY(cy, svgUnitsPmm)])
+          paths[pathName] = paths[pathName].appendPoint([svg2cagX(cx, svgUnitsPmm), svg2cagY(cy, svgUnitsPmm)])
         }
         break
       case 'a': // relative elliptical arc
@@ -13937,7 +20322,7 @@ function path (obj, svgUnitsPmm, svgUnitsX, svgUnitsY, svgUnitsV, svgGroups) {
           let sf = (pts.shift() === '1')
           cx = cx + parseFloat(pts.shift())
           cy = cy + parseFloat(pts.shift())
-          paths[pathName].appendArc([svg2cagX(cx, svgUnitsPmm), svg2cagY(cy, svgUnitsPmm)], {xradius: svg2cagX(rx, svgUnitsPmm), yradius: svg2cagY(ry, svgUnitsPmm), xaxisrotation: ro, clockwise: sf, large: lf})
+          paths[pathName] = paths[pathName].appendArc([svg2cagX(cx, svgUnitsPmm), svg2cagY(cy, svgUnitsPmm)], {xradius: svg2cagX(rx, svgUnitsPmm), yradius: svg2cagY(ry, svgUnitsPmm), xaxisrotation: ro, clockwise: sf, large: lf})
         }
         break
       case 'A': // absolute elliptical arc
@@ -13949,7 +20334,7 @@ function path (obj, svgUnitsPmm, svgUnitsX, svgUnitsY, svgUnitsV, svgGroups) {
           let sf = (pts.shift() === '1')
           cx = parseFloat(pts.shift())
           cy = parseFloat(pts.shift())
-          paths[pathName].appendArc([svg2cagX(cx, svgUnitsPmm), svg2cagY(cy, svgUnitsPmm)], {xradius: svg2cagX(rx, svgUnitsPmm), yradius: svg2cagY(ry, svgUnitsPmm), xaxisrotation: ro, clockwise: sf, large: lf})
+          paths[pathName] = paths[pathName].appendArc([svg2cagX(cx, svgUnitsPmm), svg2cagY(cy, svgUnitsPmm)], {xradius: svg2cagX(rx, svgUnitsPmm), yradius: svg2cagY(ry, svgUnitsPmm), xaxisrotation: ro, clockwise: sf, large: lf})
         }
         break
       case 'c': // relative cubic Bézier
@@ -14092,8 +20477,17 @@ function path (obj, svgUnitsPmm, svgUnitsX, svgUnitsY, svgUnitsV, svgGroups) {
         break
       case 'z': // close current line
       case 'Z':
-        paths[pathName] = paths[pathName].close().innerToCAG()
-        pathCag = pathCag.union(paths[pathName])
+        let closedpath = paths[pathName].close();
+        paths[pathName] = closedpath.innerToCAG();
+        switch (closedpath.getTurn()) {
+          default:
+          case 'clockwise':
+            pathCag = pathCag.union(paths[pathName])
+            break;
+          case 'counter-clockwise':
+            pathCag = pathCag.subtract(paths[pathName])
+            break;
+        }
         cx = sx
         cy = sy // return to the starting point
         pc = true
@@ -14111,7 +20505,7 @@ function path (obj, svgUnitsPmm, svgUnitsX, svgUnitsY, svgUnitsV, svgGroups) {
   return pathCag
 }
 
-},{"./constants":85,"./helpers":86,"@jscad/csg":12}],89:[function(require,module,exports){
+},{"./constants":100,"./helpers":101,"@jscad/csg":18}],104:[function(require,module,exports){
 const {svg2cagX, svg2cagY, cagLengthX, cagLengthY, cagLengthP, reflect, groupValue} = require('./helpers')
 const {cssPxUnit} = require('./constants')
 
@@ -14474,8 +20868,17 @@ function path (obj, svgUnitsPmm, svgUnitsX, svgUnitsY, svgUnitsV, params, svgGro
       case 'z': // close current line
       case 'Z':
         tmpCode += indent + pathName + ' = ' + pathName + '.close();\n'
-        tmpCode += indent + pathName + ' = ' + pathName + '.innerToCAG();\n'
-        tmpCode += indent + on + ' = ' + on + '.union(' + pathName + ');\n'
+        tmpCode += indent + 'switch (' + pathName + '.getTurn()) {\n';
+        tmpCode += indent + '  default:\n';
+        tmpCode += indent + '  case "clockwise":\n';
+        tmpCode += indent + '  ' + pathName + ' = ' + pathName + '.innerToCAG();\n'
+        tmpCode += indent + '  ' + on + ' = ' + on + '.union(' + pathName + ');\n'
+        tmpCode += indent + '  break;\n';
+        tmpCode += indent + '  case "counter-clockwise":\n';
+        tmpCode += indent + '  ' + pathName + ' = ' + pathName + '.innerToCAG();\n'
+        tmpCode += indent + '  ' + on + ' = ' + on + '.subtract(' + pathName + ');\n'
+        tmpCode += indent + '  break;\n';
+        tmpCode += indent + '}\n';
         cx = sx
         cy = sy // return to the starting point
         pc = true
@@ -14493,7 +20896,7 @@ function path (obj, svgUnitsPmm, svgUnitsX, svgUnitsY, svgUnitsV, params, svgGro
   return tmpCode
 }
 
-},{"./constants":85,"./helpers":86}],90:[function(require,module,exports){
+},{"./constants":100,"./helpers":101}],105:[function(require,module,exports){
 const {cagColor, cssStyle, css2cag} = require('./helpers')
 const {pxPmm} = require('./constants')
 
@@ -14941,13 +21344,14 @@ module.exports = {
   svgUse
 }
 
-},{"./constants":85,"./helpers":86}],91:[function(require,module,exports){
-// import { CSG } from '@jscad/csg'
+},{"./constants":100,"./helpers":101}],106:[function(require,module,exports){
 const {CSG} = require('@jscad/csg')
+const stringify = require('onml/lib/stringify')
 
 const mimeType = 'image/svg+xml'
 
-function serialize (cagObject) {
+const serialize = function (cagObject, options) {
+  options && options.statusCallback && options.statusCallback({progress: 0})
   var decimals = 1000
 
   // mirror the CAG about the X axis in order to generate paths into the POSITIVE direction
@@ -14958,37 +21362,54 @@ function serialize (cagObject) {
   var paths = cag.getOutlinePaths()
   var width = Math.round((bounds[1].x - bounds[0].x) * decimals) / decimals
   var height = Math.round((bounds[1].y - bounds[0].y) * decimals) / decimals
-  var svg = '<?xml version="1.0" encoding="UTF-8"?>\n'
-  svg += '<!-- Generated by OpenJSCAD.org -->\n'
-  svg += '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1 Tiny//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11-tiny.dtd">\n'
-  svg += '<svg width="' + width + 'mm" height="' + height + 'mm" viewBox="0 0 ' + width + ' ' + height + '" version="1.1" baseProfile="tiny" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">\n'
-  svg += PathsToSvg(paths, bounds)
-  svg += '</svg>'
+
+  var body = ['svg',
+    {
+      width: width + 'mm',
+      height: height + 'mm',
+      viewBox: ('0 0 ' + width + ' ' + height),
+      version: '1.1',
+      baseProfile: 'tiny',
+      xmlns: 'http://www.w3.org/2000/svg',
+      'xmlns:xlink': 'http://www.w3.org/1999/xlink'
+    },
+    PathsToSvg(paths, bounds)
+  ]
+
+  var svg = `<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated by OpenJSCAD.org -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1 Tiny//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11-tiny.dtd">
+${stringify(body)}`
+
+  options && options.statusCallback && options.statusCallback({progress: 100})
   return [svg]
 }
 
-function PathsToSvg (paths, bounds) {
+const PathsToSvg = function (paths, bounds, options) {
   // calculate offsets in order to create paths orientated from the 0,0 axis
   var xoffset = 0 - bounds[0].x
   var yoffset = 0 - bounds[0].y
-  var str = '<g>\n'
-  paths.map(function (path) {
-    str += '<path d="'
-    // FIXME add fill color when CAG has support for colors
-    var numpointsClosed = path.points.length + (path.closed ? 1 : 0)
-    for (var pointindex = 0; pointindex < numpointsClosed; pointindex++) {
-      var pointindexwrapped = pointindex
-      if (pointindexwrapped >= path.points.length) pointindexwrapped -= path.points.length
-      var point = path.points[pointindexwrapped]
-      if (pointindex > 0) {
-        str += 'L' + (point.x + xoffset) + ' ' + (point.y + yoffset)
-      } else {
-        str += 'M' + (point.x + xoffset) + ' ' + (point.y + yoffset)
-      }
+
+  return paths.reduce(function (res, path, i) {
+    options && options.statusCallback && options.statusCallback({progress: 100 * i / paths.length})
+    return res.concat([['path', {d: dPath(path, xoffset, yoffset)}]])
+  }, ['g'])
+}
+
+const dPath = function (path, xoffset, yoffset) {
+  var pointindex
+  var str = ''
+  var numpointsClosed = path.points.length + (path.closed ? 1 : 0)
+  for (pointindex = 0; pointindex < numpointsClosed; pointindex++) {
+    var pointindexwrapped = pointindex
+    if (pointindexwrapped >= path.points.length) pointindexwrapped -= path.points.length
+    var point = path.points[pointindexwrapped]
+    if (pointindex > 0) {
+      str += `L${(point.x + xoffset)} ${(point.y + yoffset)}`
+    } else {
+      str += `M${(point.x + xoffset)} ${(point.y + yoffset)}`
     }
-    str += '"/>\n'
-  })
-  str += '</g>\n'
+  }
   return str
 }
 
@@ -14997,7 +21418,7 @@ module.exports = {
   mimeType
 }
 
-},{"@jscad/csg":12}],92:[function(require,module,exports){
+},{"@jscad/csg":18,"onml/lib/stringify":112}],107:[function(require,module,exports){
 // import xmldom from 'xmldom'
 const xmldom = require('xmldom')
 const { ensureManifoldness } = require('@jscad/io-utils')
@@ -15007,7 +21428,8 @@ const mimeType = 'model/x3d+xml'
 const XMLSerializer = xmldom.XMLSerializer
 // NOTE: might be useful :https://github.com/jindw/xmldom/pull/152/commits/be5176ece6fa1591daef96a5f361aaacaa445175
 
-function serialize (CSG) {
+function serialize (CSG, options) {
+  options && options.statusCallback && options.statusCallback({progress: 0})
   CSG = ensureManifoldness(CSG)
   const DOMImplementation = typeof document !== 'undefined' ? document.implementation : new xmldom.DOMImplementation()
   // materialPolygonLists
@@ -15020,7 +21442,7 @@ function serialize (CSG) {
   // map to look up the index in vertexCoords of a given vertex
   var vertexTagToCoordIndexMap = {}
 
-  CSG.polygons.map(function (p) {
+  CSG.polygons.map(function (p, i) {
     var red = 0
     var green = 0
     var blue = 1 // default color is blue
@@ -15053,6 +21475,7 @@ function serialize (CSG) {
     }
     // add this polygonString to the list of colorString-colored polygons
     materialPolygonLists[colorString].push(polygonString)
+    options && options.statusCallback && options.statusCallback({progress: 100 * i / CSG.polygons.length})
   })
 
   // create output document
@@ -15111,6 +21534,7 @@ function serialize (CSG) {
   }
 
   const x3dstring = (new XMLSerializer()).serializeToString(exportDoc)
+  options && options.statusCallback && options.statusCallback({progress: 100})
   return [x3dstring]
 }
 
@@ -15119,7 +21543,7 @@ module.exports = {
   mimeType
 }
 
-},{"@jscad/io-utils":73,"xmldom":99}],93:[function(require,module,exports){
+},{"@jscad/io-utils":88,"xmldom":115}],108:[function(require,module,exports){
 (function (global, factory) {
   if (typeof define === "function" && define.amd) {
     define(['exports'], factory);
@@ -16175,7 +22599,7 @@ module.exports = {
 });
 
 
-},{}],94:[function(require,module,exports){
+},{}],109:[function(require,module,exports){
 (function webpackUniversalModuleDefinition(root, factory) {
 /* istanbul ignore next */
 	if(typeof exports === 'object' && typeof module === 'object')
@@ -22577,7 +29001,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ ])
 });
 ;
-},{}],95:[function(require,module,exports){
+},{}],110:[function(require,module,exports){
 /*
   Copyright (C) 2012-2013 Yusuke Suzuki <utatane.tea@gmail.com>
   Copyright (C) 2012 Ariya Hidayat <ariya.hidayat@gmail.com>
@@ -23428,29 +29852,23 @@ return /******/ (function(modules) { // webpackBootstrap
 }(exports));
 /* vim: set sw=4 ts=4 et tw=80 : */
 
-},{"./package.json":96}],96:[function(require,module,exports){
+},{"./package.json":111}],111:[function(require,module,exports){
 module.exports={
-  "_args": [
-    [
-      "estraverse@4.2.0",
-      "/Users/kraftwerk-mb/dev/projects/openjscad/core/tmp/OpenJSCAD.org/packages/core"
-    ]
-  ],
-  "_from": "estraverse@4.2.0",
+  "_from": "estraverse@^4.2.0",
   "_id": "estraverse@4.2.0",
   "_inBundle": false,
   "_integrity": "sha1-De4/7TH81GlhjOc0IJn8GvoL2xM=",
   "_location": "/estraverse",
   "_phantomChildren": {},
   "_requested": {
-    "type": "version",
+    "type": "range",
     "registry": true,
-    "raw": "estraverse@4.2.0",
+    "raw": "estraverse@^4.2.0",
     "name": "estraverse",
     "escapedName": "estraverse",
-    "rawSpec": "4.2.0",
+    "rawSpec": "^4.2.0",
     "saveSpec": null,
-    "fetchSpec": "4.2.0"
+    "fetchSpec": "^4.2.0"
   },
   "_requiredBy": [
     "/",
@@ -23458,11 +29876,14 @@ module.exports={
     "/call-matcher"
   ],
   "_resolved": "https://registry.npmjs.org/estraverse/-/estraverse-4.2.0.tgz",
-  "_spec": "4.2.0",
-  "_where": "/Users/kraftwerk-mb/dev/projects/openjscad/core/tmp/OpenJSCAD.org/packages/core",
+  "_shasum": "0dee3fed31fcd469618ce7342099fc1afa0bdb13",
+  "_spec": "estraverse@^4.2.0",
+  "_where": "/Users/kraftwerk-mb/dev/projects/openjscad/release/OpenJSCAD.org/packages/core",
   "bugs": {
     "url": "https://github.com/estools/estraverse/issues"
   },
+  "bundleDependencies": false,
+  "deprecated": false,
   "description": "ECMAScript JS AST traversal functions",
   "devDependencies": {
     "babel-preset-es2015": "^6.3.13",
@@ -23503,7 +29924,104 @@ module.exports={
   "version": "4.2.0"
 }
 
-},{}],97:[function(require,module,exports){
+},{}],112:[function(require,module,exports){
+'use strict';
+
+function isObject (o) {
+    return o && Object.prototype.toString.call(o) === '[object Object]';
+}
+
+function indent (txt) {
+    var arr, res = [];
+
+    if (typeof txt !== 'string') {
+        return txt;
+    }
+
+    arr = txt.split('\n');
+
+    if (arr.length === 1) {
+        return '  ' + txt;
+    }
+
+    arr.forEach(function (e) {
+        if (e.trim() === '') {
+            res.push(e);
+            return;
+        }
+        res.push('  ' + e);
+    });
+
+    return res.join('\n');
+}
+
+function clean (txt) {
+    var arr = txt.split('\n');
+    var res = [];
+    arr.forEach(function (e) {
+        if (e.trim() === '') {
+            return;
+        }
+        res.push(e);
+    });
+    return res.join('\n');
+}
+
+function stringify (a) {
+    var res, body, isEmpty, isFlat;
+
+    body = '';
+    isFlat = true;
+    isEmpty = a.some(function (e, i, arr) {
+        if (i === 0) {
+            res = '<' + e;
+            if (arr.length === 1) {
+                return true;
+            }
+            return;
+        }
+
+        if (i === 1) {
+            if (isObject(e)) {
+                Object.keys(e).forEach(function (key) {
+                    res += ' ' + key + '="' + e[key] + '"';
+                });
+                if (arr.length === 2) {
+                    return true;
+                }
+                res += '>';
+                return;
+            } else {
+                res += '>';
+            }
+        }
+
+        switch (typeof e) {
+        case 'string':
+        case 'number':
+        case 'boolean':
+            body += e + '\n';
+            return;
+        }
+
+        isFlat = false;
+        body += stringify(e);
+    });
+
+    if (isEmpty) {
+        return res + '/>\n'; // short form
+    } else {
+        if (isFlat) {
+            return res + clean(body) + '</' + a[0] + '>\n';
+        } else {
+            return res + '\n' + indent(body) + '</' + a[0] + '>\n';
+        }
+    }
+}
+
+module.exports = stringify;
+
+},{}],113:[function(require,module,exports){
 (function (Buffer){
 ;(function (sax) { // wrapper for non-node envs
   sax.parser = function (strict, opt) { return new SAXParser(strict, opt) }
@@ -25072,7 +31590,7 @@ module.exports={
 })(typeof exports === 'undefined' ? this.sax = {} : exports)
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":111,"stream":209,"string_decoder":110}],98:[function(require,module,exports){
+},{"buffer":127,"stream":224,"string_decoder":126}],114:[function(require,module,exports){
 var bundleFn = arguments[3];
 var sources = arguments[4];
 var cache = arguments[5];
@@ -25154,7 +31672,7 @@ module.exports = function (fn, options) {
     return worker;
 };
 
-},{}],99:[function(require,module,exports){
+},{}],115:[function(require,module,exports){
 function DOMParser(options){
 	this.options = options ||{locator:{}};
 	
@@ -25407,7 +31925,7 @@ function appendElement (hander,node) {
 	exports.DOMParser = DOMParser;
 //}
 
-},{"./dom":100,"./sax":101}],100:[function(require,module,exports){
+},{"./dom":116,"./sax":117}],116:[function(require,module,exports){
 /*
  * DOM Level 2
  * Object DOMException
@@ -26653,7 +33171,7 @@ try{
 	exports.XMLSerializer = XMLSerializer;
 //}
 
-},{}],101:[function(require,module,exports){
+},{}],117:[function(require,module,exports){
 //[4]   	NameStartChar	   ::=   	":" | [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6] | [#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
 //[4a]   	NameChar	   ::=   	NameStartChar | "-" | "." | [0-9] | #xB7 | [#x0300-#x036F] | [#x203F-#x2040]
 //[5]   	Name	   ::=   	NameStartChar (NameChar)*
@@ -27288,7 +33806,7 @@ function split(source,start){
 exports.XMLReader = XMLReader;
 
 
-},{}],102:[function(require,module,exports){
+},{}],118:[function(require,module,exports){
 /**
  * parse the jscad script to get the parameter definitions
  * @param {String} script the script
@@ -27319,14 +33837,14 @@ module.exports = function getParamDefinitions (script) {
   return params
 }
 
-},{}],103:[function(require,module,exports){
+},{}],119:[function(require,module,exports){
 /**
  * extracts the parameter
  * @param {Array} paramControls
  * @param {Boolean} onlyChanged
  * @returns {Object} the parameter values, as an object
  */
-module.exports = function getParameterValues (paramControls, parameterDefinitions, onlyChanged) {
+module.exports = function getParameterValuesFromUIControls (paramControls, parameterDefinitions, onlyChanged) {
   let paramValues = {}
   let value
   for (var i = 0; i < paramControls.length; i++) {
@@ -27378,7 +33896,7 @@ module.exports = function getParameterValues (paramControls, parameterDefinition
   return paramValues
 }
 
-},{}],104:[function(require,module,exports){
+},{}],120:[function(require,module,exports){
 /* converts input data to array if it is not already an array */
 function toArray (data) {
   if (!data) return []
@@ -27388,7 +33906,7 @@ function toArray (data) {
 
 module.exports = {toArray}
 
-},{}],105:[function(require,module,exports){
+},{}],121:[function(require,module,exports){
 const { CSG, CAG, isCSG, isCAG } = require('@jscad/csg')
 const {toArray} = require('./arrays')
 
@@ -27470,7 +33988,7 @@ module.exports = {
   mergeSolids2
 }
 
-},{"./arrays":104,"@jscad/csg":12}],106:[function(require,module,exports){
+},{"./arrays":120,"@jscad/csg":18}],122:[function(require,module,exports){
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('@most/prelude')) :
   typeof define === 'function' && define.amd ? define(['exports', '@most/prelude'], factory) :
@@ -27588,7 +34106,7 @@ Object.defineProperty(exports, '__esModule', { value: true });
 })));
 
 
-},{"@most/prelude":107}],107:[function(require,module,exports){
+},{"@most/prelude":123}],123:[function(require,module,exports){
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
 	typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -27747,6 +34265,7 @@ function unsafeRemove(i, a, l) {
 
 // removeAll :: (a -> boolean) -> [a] -> [a]
 // remove all elements matching a predicate
+// @deprecated
 function removeAll(f, a) {
   var l = a.length;
   var b = new Array(l);
@@ -27890,7 +34409,7 @@ Object.defineProperty(exports, '__esModule', { value: true });
 })));
 
 
-},{}],108:[function(require,module,exports){
+},{}],124:[function(require,module,exports){
 'use strict'
 
 exports.byteLength = byteLength
@@ -27907,68 +34426,102 @@ for (var i = 0, len = code.length; i < len; ++i) {
   revLookup[code.charCodeAt(i)] = i
 }
 
+// Support decoding URL-safe base64 strings, as Node.js does.
+// See: https://en.wikipedia.org/wiki/Base64#URL_applications
 revLookup['-'.charCodeAt(0)] = 62
 revLookup['_'.charCodeAt(0)] = 63
 
-function placeHoldersCount (b64) {
+function getLens (b64) {
   var len = b64.length
+
   if (len % 4 > 0) {
     throw new Error('Invalid string. Length must be a multiple of 4')
   }
 
-  // the number of equal signs (place holders)
-  // if there are two placeholders, than the two characters before it
-  // represent one byte
-  // if there is only one, then the three characters before it represent 2 bytes
-  // this is just a cheap hack to not do indexOf twice
-  return b64[len - 2] === '=' ? 2 : b64[len - 1] === '=' ? 1 : 0
+  // Trim off extra bytes after placeholder bytes are found
+  // See: https://github.com/beatgammit/base64-js/issues/42
+  var validLen = b64.indexOf('=')
+  if (validLen === -1) validLen = len
+
+  var placeHoldersLen = validLen === len
+    ? 0
+    : 4 - (validLen % 4)
+
+  return [validLen, placeHoldersLen]
 }
 
+// base64 is 4/3 + up to two characters of the original data
 function byteLength (b64) {
-  // base64 is 4/3 + up to two characters of the original data
-  return (b64.length * 3 / 4) - placeHoldersCount(b64)
+  var lens = getLens(b64)
+  var validLen = lens[0]
+  var placeHoldersLen = lens[1]
+  return ((validLen + placeHoldersLen) * 3 / 4) - placeHoldersLen
+}
+
+function _byteLength (b64, validLen, placeHoldersLen) {
+  return ((validLen + placeHoldersLen) * 3 / 4) - placeHoldersLen
 }
 
 function toByteArray (b64) {
-  var i, l, tmp, placeHolders, arr
-  var len = b64.length
-  placeHolders = placeHoldersCount(b64)
+  var tmp
+  var lens = getLens(b64)
+  var validLen = lens[0]
+  var placeHoldersLen = lens[1]
 
-  arr = new Arr((len * 3 / 4) - placeHolders)
+  var arr = new Arr(_byteLength(b64, validLen, placeHoldersLen))
+
+  var curByte = 0
 
   // if there are placeholders, only get up to the last complete 4 chars
-  l = placeHolders > 0 ? len - 4 : len
+  var len = placeHoldersLen > 0
+    ? validLen - 4
+    : validLen
 
-  var L = 0
-
-  for (i = 0; i < l; i += 4) {
-    tmp = (revLookup[b64.charCodeAt(i)] << 18) | (revLookup[b64.charCodeAt(i + 1)] << 12) | (revLookup[b64.charCodeAt(i + 2)] << 6) | revLookup[b64.charCodeAt(i + 3)]
-    arr[L++] = (tmp >> 16) & 0xFF
-    arr[L++] = (tmp >> 8) & 0xFF
-    arr[L++] = tmp & 0xFF
+  for (var i = 0; i < len; i += 4) {
+    tmp =
+      (revLookup[b64.charCodeAt(i)] << 18) |
+      (revLookup[b64.charCodeAt(i + 1)] << 12) |
+      (revLookup[b64.charCodeAt(i + 2)] << 6) |
+      revLookup[b64.charCodeAt(i + 3)]
+    arr[curByte++] = (tmp >> 16) & 0xFF
+    arr[curByte++] = (tmp >> 8) & 0xFF
+    arr[curByte++] = tmp & 0xFF
   }
 
-  if (placeHolders === 2) {
-    tmp = (revLookup[b64.charCodeAt(i)] << 2) | (revLookup[b64.charCodeAt(i + 1)] >> 4)
-    arr[L++] = tmp & 0xFF
-  } else if (placeHolders === 1) {
-    tmp = (revLookup[b64.charCodeAt(i)] << 10) | (revLookup[b64.charCodeAt(i + 1)] << 4) | (revLookup[b64.charCodeAt(i + 2)] >> 2)
-    arr[L++] = (tmp >> 8) & 0xFF
-    arr[L++] = tmp & 0xFF
+  if (placeHoldersLen === 2) {
+    tmp =
+      (revLookup[b64.charCodeAt(i)] << 2) |
+      (revLookup[b64.charCodeAt(i + 1)] >> 4)
+    arr[curByte++] = tmp & 0xFF
+  }
+
+  if (placeHoldersLen === 1) {
+    tmp =
+      (revLookup[b64.charCodeAt(i)] << 10) |
+      (revLookup[b64.charCodeAt(i + 1)] << 4) |
+      (revLookup[b64.charCodeAt(i + 2)] >> 2)
+    arr[curByte++] = (tmp >> 8) & 0xFF
+    arr[curByte++] = tmp & 0xFF
   }
 
   return arr
 }
 
 function tripletToBase64 (num) {
-  return lookup[num >> 18 & 0x3F] + lookup[num >> 12 & 0x3F] + lookup[num >> 6 & 0x3F] + lookup[num & 0x3F]
+  return lookup[num >> 18 & 0x3F] +
+    lookup[num >> 12 & 0x3F] +
+    lookup[num >> 6 & 0x3F] +
+    lookup[num & 0x3F]
 }
 
 function encodeChunk (uint8, start, end) {
   var tmp
   var output = []
   for (var i = start; i < end; i += 3) {
-    tmp = (uint8[i] << 16) + (uint8[i + 1] << 8) + (uint8[i + 2])
+    tmp =
+      ((uint8[i] << 16) & 0xFF0000) +
+      ((uint8[i + 1] << 8) & 0xFF00) +
+      (uint8[i + 2] & 0xFF)
     output.push(tripletToBase64(tmp))
   }
   return output.join('')
@@ -27978,37 +34531,40 @@ function fromByteArray (uint8) {
   var tmp
   var len = uint8.length
   var extraBytes = len % 3 // if we have 1 byte left, pad 2 bytes
-  var output = ''
   var parts = []
   var maxChunkLength = 16383 // must be multiple of 3
 
   // go through the array every three bytes, we'll deal with trailing stuff later
   for (var i = 0, len2 = len - extraBytes; i < len2; i += maxChunkLength) {
-    parts.push(encodeChunk(uint8, i, (i + maxChunkLength) > len2 ? len2 : (i + maxChunkLength)))
+    parts.push(encodeChunk(
+      uint8, i, (i + maxChunkLength) > len2 ? len2 : (i + maxChunkLength)
+    ))
   }
 
   // pad the end with zeros, but make sure to not forget the extra bytes
   if (extraBytes === 1) {
     tmp = uint8[len - 1]
-    output += lookup[tmp >> 2]
-    output += lookup[(tmp << 4) & 0x3F]
-    output += '=='
+    parts.push(
+      lookup[tmp >> 2] +
+      lookup[(tmp << 4) & 0x3F] +
+      '=='
+    )
   } else if (extraBytes === 2) {
-    tmp = (uint8[len - 2] << 8) + (uint8[len - 1])
-    output += lookup[tmp >> 10]
-    output += lookup[(tmp >> 4) & 0x3F]
-    output += lookup[(tmp << 2) & 0x3F]
-    output += '='
+    tmp = (uint8[len - 2] << 8) + uint8[len - 1]
+    parts.push(
+      lookup[tmp >> 10] +
+      lookup[(tmp >> 4) & 0x3F] +
+      lookup[(tmp << 2) & 0x3F] +
+      '='
+    )
   }
-
-  parts.push(output)
 
   return parts.join('')
 }
 
-},{}],109:[function(require,module,exports){
+},{}],125:[function(require,module,exports){
 
-},{}],110:[function(require,module,exports){
+},{}],126:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -28231,7 +34787,7 @@ function base64DetectIncompleteChar(buffer) {
   this.charLength = this.charReceived ? 3 : 0;
 }
 
-},{"buffer":111}],111:[function(require,module,exports){
+},{"buffer":127}],127:[function(require,module,exports){
 /*!
  * The buffer module from node.js, for the browser.
  *
@@ -28280,16 +34836,32 @@ function typedArraySupport () {
   // Can typed array instances can be augmented?
   try {
     var arr = new Uint8Array(1)
-    arr.__proto__ = {__proto__: Uint8Array.prototype, foo: function () { return 42 }}
+    arr.__proto__ = { __proto__: Uint8Array.prototype, foo: function () { return 42 } }
     return arr.foo() === 42
   } catch (e) {
     return false
   }
 }
 
+Object.defineProperty(Buffer.prototype, 'parent', {
+  enumerable: true,
+  get: function () {
+    if (!Buffer.isBuffer(this)) return undefined
+    return this.buffer
+  }
+})
+
+Object.defineProperty(Buffer.prototype, 'offset', {
+  enumerable: true,
+  get: function () {
+    if (!Buffer.isBuffer(this)) return undefined
+    return this.byteOffset
+  }
+})
+
 function createBuffer (length) {
   if (length > K_MAX_LENGTH) {
-    throw new RangeError('Invalid typed array length')
+    throw new RangeError('The value "' + length + '" is invalid for option "size"')
   }
   // Return an augmented `Uint8Array` instance
   var buf = new Uint8Array(length)
@@ -28311,8 +34883,8 @@ function Buffer (arg, encodingOrOffset, length) {
   // Common case.
   if (typeof arg === 'number') {
     if (typeof encodingOrOffset === 'string') {
-      throw new Error(
-        'If encoding is specified then the first argument must be a string'
+      throw new TypeError(
+        'The "string" argument must be of type string. Received type number'
       )
     }
     return allocUnsafe(arg)
@@ -28321,7 +34893,7 @@ function Buffer (arg, encodingOrOffset, length) {
 }
 
 // Fix subarray() in ES2016. See: https://github.com/feross/buffer/pull/97
-if (typeof Symbol !== 'undefined' && Symbol.species &&
+if (typeof Symbol !== 'undefined' && Symbol.species != null &&
     Buffer[Symbol.species] === Buffer) {
   Object.defineProperty(Buffer, Symbol.species, {
     value: null,
@@ -28334,19 +34906,51 @@ if (typeof Symbol !== 'undefined' && Symbol.species &&
 Buffer.poolSize = 8192 // not used by this implementation
 
 function from (value, encodingOrOffset, length) {
-  if (typeof value === 'number') {
-    throw new TypeError('"value" argument must not be a number')
-  }
-
-  if (isArrayBuffer(value)) {
-    return fromArrayBuffer(value, encodingOrOffset, length)
-  }
-
   if (typeof value === 'string') {
     return fromString(value, encodingOrOffset)
   }
 
-  return fromObject(value)
+  if (ArrayBuffer.isView(value)) {
+    return fromArrayLike(value)
+  }
+
+  if (value == null) {
+    throw TypeError(
+      'The first argument must be one of type string, Buffer, ArrayBuffer, Array, ' +
+      'or Array-like Object. Received type ' + (typeof value)
+    )
+  }
+
+  if (isInstance(value, ArrayBuffer) ||
+      (value && isInstance(value.buffer, ArrayBuffer))) {
+    return fromArrayBuffer(value, encodingOrOffset, length)
+  }
+
+  if (typeof value === 'number') {
+    throw new TypeError(
+      'The "value" argument must not be of type number. Received type number'
+    )
+  }
+
+  var valueOf = value.valueOf && value.valueOf()
+  if (valueOf != null && valueOf !== value) {
+    return Buffer.from(valueOf, encodingOrOffset, length)
+  }
+
+  var b = fromObject(value)
+  if (b) return b
+
+  if (typeof Symbol !== 'undefined' && Symbol.toPrimitive != null &&
+      typeof value[Symbol.toPrimitive] === 'function') {
+    return Buffer.from(
+      value[Symbol.toPrimitive]('string'), encodingOrOffset, length
+    )
+  }
+
+  throw new TypeError(
+    'The first argument must be one of type string, Buffer, ArrayBuffer, Array, ' +
+    'or Array-like Object. Received type ' + (typeof value)
+  )
 }
 
 /**
@@ -28368,9 +34972,9 @@ Buffer.__proto__ = Uint8Array
 
 function assertSize (size) {
   if (typeof size !== 'number') {
-    throw new TypeError('"size" argument must be a number')
+    throw new TypeError('"size" argument must be of type number')
   } else if (size < 0) {
-    throw new RangeError('"size" argument must not be negative')
+    throw new RangeError('The value "' + size + '" is invalid for option "size"')
   }
 }
 
@@ -28422,7 +35026,7 @@ function fromString (string, encoding) {
   }
 
   if (!Buffer.isEncoding(encoding)) {
-    throw new TypeError('"encoding" must be a valid string encoding')
+    throw new TypeError('Unknown encoding: ' + encoding)
   }
 
   var length = byteLength(string, encoding) | 0
@@ -28451,11 +35055,11 @@ function fromArrayLike (array) {
 
 function fromArrayBuffer (array, byteOffset, length) {
   if (byteOffset < 0 || array.byteLength < byteOffset) {
-    throw new RangeError('\'offset\' is out of bounds')
+    throw new RangeError('"offset" is outside of buffer bounds')
   }
 
   if (array.byteLength < byteOffset + (length || 0)) {
-    throw new RangeError('\'length\' is out of bounds')
+    throw new RangeError('"length" is outside of buffer bounds')
   }
 
   var buf
@@ -28485,20 +35089,16 @@ function fromObject (obj) {
     return buf
   }
 
-  if (obj) {
-    if (isArrayBufferView(obj) || 'length' in obj) {
-      if (typeof obj.length !== 'number' || numberIsNaN(obj.length)) {
-        return createBuffer(0)
-      }
-      return fromArrayLike(obj)
+  if (obj.length !== undefined) {
+    if (typeof obj.length !== 'number' || numberIsNaN(obj.length)) {
+      return createBuffer(0)
     }
-
-    if (obj.type === 'Buffer' && Array.isArray(obj.data)) {
-      return fromArrayLike(obj.data)
-    }
+    return fromArrayLike(obj)
   }
 
-  throw new TypeError('First argument must be a string, Buffer, ArrayBuffer, Array, or array-like object.')
+  if (obj.type === 'Buffer' && Array.isArray(obj.data)) {
+    return fromArrayLike(obj.data)
+  }
 }
 
 function checked (length) {
@@ -28519,12 +35119,17 @@ function SlowBuffer (length) {
 }
 
 Buffer.isBuffer = function isBuffer (b) {
-  return b != null && b._isBuffer === true
+  return b != null && b._isBuffer === true &&
+    b !== Buffer.prototype // so Buffer.isBuffer(Buffer.prototype) will be false
 }
 
 Buffer.compare = function compare (a, b) {
+  if (isInstance(a, Uint8Array)) a = Buffer.from(a, a.offset, a.byteLength)
+  if (isInstance(b, Uint8Array)) b = Buffer.from(b, b.offset, b.byteLength)
   if (!Buffer.isBuffer(a) || !Buffer.isBuffer(b)) {
-    throw new TypeError('Arguments must be Buffers')
+    throw new TypeError(
+      'The "buf1", "buf2" arguments must be one of type Buffer or Uint8Array'
+    )
   }
 
   if (a === b) return 0
@@ -28585,6 +35190,9 @@ Buffer.concat = function concat (list, length) {
   var pos = 0
   for (i = 0; i < list.length; ++i) {
     var buf = list[i]
+    if (isInstance(buf, Uint8Array)) {
+      buf = Buffer.from(buf)
+    }
     if (!Buffer.isBuffer(buf)) {
       throw new TypeError('"list" argument must be an Array of Buffers')
     }
@@ -28598,15 +35206,19 @@ function byteLength (string, encoding) {
   if (Buffer.isBuffer(string)) {
     return string.length
   }
-  if (isArrayBufferView(string) || isArrayBuffer(string)) {
+  if (ArrayBuffer.isView(string) || isInstance(string, ArrayBuffer)) {
     return string.byteLength
   }
   if (typeof string !== 'string') {
-    string = '' + string
+    throw new TypeError(
+      'The "string" argument must be one of type string, Buffer, or ArrayBuffer. ' +
+      'Received type ' + typeof string
+    )
   }
 
   var len = string.length
-  if (len === 0) return 0
+  var mustMatch = (arguments.length > 2 && arguments[2] === true)
+  if (!mustMatch && len === 0) return 0
 
   // Use a for loop to avoid recursion
   var loweredCase = false
@@ -28618,7 +35230,6 @@ function byteLength (string, encoding) {
         return len
       case 'utf8':
       case 'utf-8':
-      case undefined:
         return utf8ToBytes(string).length
       case 'ucs2':
       case 'ucs-2':
@@ -28630,7 +35241,9 @@ function byteLength (string, encoding) {
       case 'base64':
         return base64ToBytes(string).length
       default:
-        if (loweredCase) return utf8ToBytes(string).length // assume utf8
+        if (loweredCase) {
+          return mustMatch ? -1 : utf8ToBytes(string).length // assume utf8
+        }
         encoding = ('' + encoding).toLowerCase()
         loweredCase = true
     }
@@ -28766,6 +35379,8 @@ Buffer.prototype.toString = function toString () {
   return slowToString.apply(this, arguments)
 }
 
+Buffer.prototype.toLocaleString = Buffer.prototype.toString
+
 Buffer.prototype.equals = function equals (b) {
   if (!Buffer.isBuffer(b)) throw new TypeError('Argument must be a Buffer')
   if (this === b) return true
@@ -28775,16 +35390,20 @@ Buffer.prototype.equals = function equals (b) {
 Buffer.prototype.inspect = function inspect () {
   var str = ''
   var max = exports.INSPECT_MAX_BYTES
-  if (this.length > 0) {
-    str = this.toString('hex', 0, max).match(/.{2}/g).join(' ')
-    if (this.length > max) str += ' ... '
-  }
+  str = this.toString('hex', 0, max).replace(/(.{2})/g, '$1 ').trim()
+  if (this.length > max) str += ' ... '
   return '<Buffer ' + str + '>'
 }
 
 Buffer.prototype.compare = function compare (target, start, end, thisStart, thisEnd) {
+  if (isInstance(target, Uint8Array)) {
+    target = Buffer.from(target, target.offset, target.byteLength)
+  }
   if (!Buffer.isBuffer(target)) {
-    throw new TypeError('Argument must be a Buffer')
+    throw new TypeError(
+      'The "target" argument must be one of type Buffer or Uint8Array. ' +
+      'Received type ' + (typeof target)
+    )
   }
 
   if (start === undefined) {
@@ -28863,7 +35482,7 @@ function bidirectionalIndexOf (buffer, val, byteOffset, encoding, dir) {
   } else if (byteOffset < -0x80000000) {
     byteOffset = -0x80000000
   }
-  byteOffset = +byteOffset  // Coerce to Number.
+  byteOffset = +byteOffset // Coerce to Number.
   if (numberIsNaN(byteOffset)) {
     // byteOffset: it it's undefined, null, NaN, "foo", etc, search whole buffer
     byteOffset = dir ? 0 : (buffer.length - 1)
@@ -28986,9 +35605,7 @@ function hexWrite (buf, string, offset, length) {
     }
   }
 
-  // must be an even number of digits
   var strLen = string.length
-  if (strLen % 2 !== 0) throw new TypeError('Invalid hex string')
 
   if (length > strLen / 2) {
     length = strLen / 2
@@ -29117,8 +35734,8 @@ function utf8Slice (buf, start, end) {
     var codePoint = null
     var bytesPerSequence = (firstByte > 0xEF) ? 4
       : (firstByte > 0xDF) ? 3
-      : (firstByte > 0xBF) ? 2
-      : 1
+        : (firstByte > 0xBF) ? 2
+          : 1
 
     if (i + bytesPerSequence <= end) {
       var secondByte, thirdByte, fourthByte, tempCodePoint
@@ -29681,6 +36298,7 @@ Buffer.prototype.writeDoubleBE = function writeDoubleBE (value, offset, noAssert
 
 // copy(targetBuffer, targetStart=0, sourceStart=0, sourceEnd=buffer.length)
 Buffer.prototype.copy = function copy (target, targetStart, start, end) {
+  if (!Buffer.isBuffer(target)) throw new TypeError('argument should be a Buffer')
   if (!start) start = 0
   if (!end && end !== 0) end = this.length
   if (targetStart >= target.length) targetStart = target.length
@@ -29695,7 +36313,7 @@ Buffer.prototype.copy = function copy (target, targetStart, start, end) {
   if (targetStart < 0) {
     throw new RangeError('targetStart out of bounds')
   }
-  if (start < 0 || start >= this.length) throw new RangeError('sourceStart out of bounds')
+  if (start < 0 || start >= this.length) throw new RangeError('Index out of range')
   if (end < 0) throw new RangeError('sourceEnd out of bounds')
 
   // Are we oob?
@@ -29705,22 +36323,19 @@ Buffer.prototype.copy = function copy (target, targetStart, start, end) {
   }
 
   var len = end - start
-  var i
 
-  if (this === target && start < targetStart && targetStart < end) {
+  if (this === target && typeof Uint8Array.prototype.copyWithin === 'function') {
+    // Use built-in when available, missing from IE11
+    this.copyWithin(targetStart, start, end)
+  } else if (this === target && start < targetStart && targetStart < end) {
     // descending copy from end
-    for (i = len - 1; i >= 0; --i) {
-      target[i + targetStart] = this[i + start]
-    }
-  } else if (len < 1000) {
-    // ascending copy from start
-    for (i = 0; i < len; ++i) {
+    for (var i = len - 1; i >= 0; --i) {
       target[i + targetStart] = this[i + start]
     }
   } else {
     Uint8Array.prototype.set.call(
       target,
-      this.subarray(start, start + len),
+      this.subarray(start, end),
       targetStart
     )
   }
@@ -29743,17 +36358,19 @@ Buffer.prototype.fill = function fill (val, start, end, encoding) {
       encoding = end
       end = this.length
     }
-    if (val.length === 1) {
-      var code = val.charCodeAt(0)
-      if (code < 256) {
-        val = code
-      }
-    }
     if (encoding !== undefined && typeof encoding !== 'string') {
       throw new TypeError('encoding must be a string')
     }
     if (typeof encoding === 'string' && !Buffer.isEncoding(encoding)) {
       throw new TypeError('Unknown encoding: ' + encoding)
+    }
+    if (val.length === 1) {
+      var code = val.charCodeAt(0)
+      if ((encoding === 'utf8' && code < 128) ||
+          encoding === 'latin1') {
+        // Fast path: If `val` fits into a single byte, use that numeric value.
+        val = code
+      }
     }
   } else if (typeof val === 'number') {
     val = val & 255
@@ -29781,8 +36398,12 @@ Buffer.prototype.fill = function fill (val, start, end, encoding) {
   } else {
     var bytes = Buffer.isBuffer(val)
       ? val
-      : new Buffer(val, encoding)
+      : Buffer.from(val, encoding)
     var len = bytes.length
+    if (len === 0) {
+      throw new TypeError('The value "' + val +
+        '" is invalid for argument "value"')
+    }
     for (i = 0; i < end - start; ++i) {
       this[i + start] = bytes[i % len]
     }
@@ -29797,6 +36418,8 @@ Buffer.prototype.fill = function fill (val, start, end, encoding) {
 var INVALID_BASE64_RE = /[^+/0-9A-Za-z-_]/g
 
 function base64clean (str) {
+  // Node takes equal signs as end of the Base64 encoding
+  str = str.split('=')[0]
   // Node strips out invalid characters like \n and \t from the string, base64-js does not
   str = str.trim().replace(INVALID_BASE64_RE, '')
   // Node converts strings with length < 2 to ''
@@ -29930,24 +36553,20 @@ function blitBuffer (src, dst, offset, length) {
   return i
 }
 
-// ArrayBuffers from another context (i.e. an iframe) do not pass the `instanceof` check
-// but they should be treated as valid. See: https://github.com/feross/buffer/issues/166
-function isArrayBuffer (obj) {
-  return obj instanceof ArrayBuffer ||
-    (obj != null && obj.constructor != null && obj.constructor.name === 'ArrayBuffer' &&
-      typeof obj.byteLength === 'number')
+// ArrayBuffer or Uint8Array objects from other contexts (i.e. iframes) do not pass
+// the `instanceof` check but they should be treated as of that type.
+// See: https://github.com/feross/buffer/issues/166
+function isInstance (obj, type) {
+  return obj instanceof type ||
+    (obj != null && obj.constructor != null && obj.constructor.name != null &&
+      obj.constructor.name === type.name)
 }
-
-// Node 0.10 supports `ArrayBuffer` but lacks `ArrayBuffer.isView`
-function isArrayBufferView (obj) {
-  return (typeof ArrayBuffer.isView === 'function') && ArrayBuffer.isView(obj)
-}
-
 function numberIsNaN (obj) {
+  // For IE11 support
   return obj !== obj // eslint-disable-line no-self-compare
 }
 
-},{"base64-js":108,"ieee754":114}],112:[function(require,module,exports){
+},{"base64-js":124,"ieee754":130}],128:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -30058,7 +36677,7 @@ function objectToString(o) {
 }
 
 }).call(this,{"isBuffer":require("../../is-buffer/index.js")})
-},{"../../is-buffer/index.js":116}],113:[function(require,module,exports){
+},{"../../is-buffer/index.js":132}],129:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -30362,10 +36981,10 @@ function isUndefined(arg) {
   return arg === void 0;
 }
 
-},{}],114:[function(require,module,exports){
+},{}],130:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
-  var eLen = nBytes * 8 - mLen - 1
+  var eLen = (nBytes * 8) - mLen - 1
   var eMax = (1 << eLen) - 1
   var eBias = eMax >> 1
   var nBits = -7
@@ -30378,12 +36997,12 @@ exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   e = s & ((1 << (-nBits)) - 1)
   s >>= (-nBits)
   nBits += eLen
-  for (; nBits > 0; e = e * 256 + buffer[offset + i], i += d, nBits -= 8) {}
+  for (; nBits > 0; e = (e * 256) + buffer[offset + i], i += d, nBits -= 8) {}
 
   m = e & ((1 << (-nBits)) - 1)
   e >>= (-nBits)
   nBits += mLen
-  for (; nBits > 0; m = m * 256 + buffer[offset + i], i += d, nBits -= 8) {}
+  for (; nBits > 0; m = (m * 256) + buffer[offset + i], i += d, nBits -= 8) {}
 
   if (e === 0) {
     e = 1 - eBias
@@ -30398,7 +37017,7 @@ exports.read = function (buffer, offset, isLE, mLen, nBytes) {
 
 exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   var e, m, c
-  var eLen = nBytes * 8 - mLen - 1
+  var eLen = (nBytes * 8) - mLen - 1
   var eMax = (1 << eLen) - 1
   var eBias = eMax >> 1
   var rt = (mLen === 23 ? Math.pow(2, -24) - Math.pow(2, -77) : 0)
@@ -30431,7 +37050,7 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
       m = 0
       e = eMax
     } else if (e + eBias >= 1) {
-      m = (value * c - 1) * Math.pow(2, mLen)
+      m = ((value * c) - 1) * Math.pow(2, mLen)
       e = e + eBias
     } else {
       m = value * Math.pow(2, eBias - 1) * Math.pow(2, mLen)
@@ -30448,7 +37067,7 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],115:[function(require,module,exports){
+},{}],131:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -30473,7 +37092,7 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],116:[function(require,module,exports){
+},{}],132:[function(require,module,exports){
 /*!
  * Determine if an object is a Buffer
  *
@@ -30496,14 +37115,14 @@ function isSlowBuffer (obj) {
   return typeof obj.readFloatLE === 'function' && typeof obj.slice === 'function' && isBuffer(obj.slice(0, 0))
 }
 
-},{}],117:[function(require,module,exports){
+},{}],133:[function(require,module,exports){
 var toString = {}.toString;
 
 module.exports = Array.isArray || function (arr) {
   return toString.call(arr) == '[object Array]';
 };
 
-},{}],118:[function(require,module,exports){
+},{}],134:[function(require,module,exports){
 const { merge } = require('most')
 
 // based on http://jsfiddle.net/mattpodwysocki/pfCqq/
@@ -30589,7 +37208,7 @@ function drags ({mouseDowns$, mouseUps$, mouseMoves$, touchStarts$, touchEnds$, 
 
 module.exports = {mouseDrags, touchDrags, drags}
 
-},{"most":160}],119:[function(require,module,exports){
+},{"most":176}],135:[function(require,module,exports){
 const { fromEvent, merge } = require('most')
 const { normalizeWheel, preventDefault } = require('./utils')
 const { presses } = require('./presses')
@@ -30690,7 +37309,7 @@ function pointerGestures (input, options) {
 
 module.exports = {baseInteractionsFromEvents, pointerGestures}
 
-},{"./drags":118,"./presses":120,"./taps":121,"./utils":122,"./zooms":123,"most":160}],120:[function(require,module,exports){
+},{"./drags":134,"./presses":136,"./taps":137,"./utils":138,"./zooms":139,"most":176}],136:[function(require,module,exports){
 const { just, merge, empty } = require('most')
 const { exists, isMoving } = require('./utils')
 /* alternative "clicks" (ie mouseDown -> mouseUp ) implementation, with more fine
@@ -30782,7 +37401,7 @@ function presses (baseInteractions, settings) {
 
 module.exports = {presses}
 
-},{"./utils":122,"most":160}],121:[function(require,module,exports){
+},{"./utils":138,"most":176}],137:[function(require,module,exports){
 const { exists } = require('./utils')
 
 /**
@@ -30820,7 +37439,7 @@ function taps (presses$, settings) {
 
 module.exports = {taps}
 
-},{"./utils":122}],122:[function(require,module,exports){
+},{"./utils":138}],138:[function(require,module,exports){
 const { empty, continueWith } = require('most')
 
 // for most.js
@@ -30890,7 +37509,7 @@ return baseBuffer$
 
 module.exports = {repeat, preventDefault, isMoving, normalizeWheel, exists}
 
-},{"most":160}],123:[function(require,module,exports){
+},{"most":176}],139:[function(require,module,exports){
 const { merge } = require('most')
 
 // this one is not reliable enough
@@ -30976,7 +37595,7 @@ function zooms ({touchStarts$, touchMoves$, touchEnds$, wheel$}, settings) {
 
 module.exports = {pinchZooms, zooms}
 
-},{"most":160}],124:[function(require,module,exports){
+},{"most":176}],140:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -31058,7 +37677,7 @@ LinkedList.prototype.dispose = function () {
 
   return Promise.all(promises);
 };
-},{}],125:[function(require,module,exports){
+},{}],141:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -31072,7 +37691,7 @@ exports.isPromise = isPromise;
 function isPromise(p) {
   return p !== null && typeof p === 'object' && typeof p.then === 'function';
 }
-},{}],126:[function(require,module,exports){
+},{}],142:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -31141,7 +37760,7 @@ function copy(src, srcIndex, dst, dstIndex, len) {
     src[j + srcIndex] = void 0;
   }
 }
-},{}],127:[function(require,module,exports){
+},{}],143:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -31159,7 +37778,7 @@ function Stream(source) {
 Stream.prototype.run = function (sink, scheduler) {
   return this.source.run(sink, scheduler);
 };
-},{}],128:[function(require,module,exports){
+},{}],144:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -31271,7 +37890,7 @@ ReduceSink.prototype.error = _Pipe2.default.prototype.error;
 ReduceSink.prototype.end = function (t) {
   this.sink.end(t, this.value);
 };
-},{"../Stream":127,"../disposable/dispose":155,"../runSource":166,"../scheduler/PropagateTask":168,"../sink/Pipe":175}],129:[function(require,module,exports){
+},{"../Stream":143,"../disposable/dispose":171,"../runSource":182,"../scheduler/PropagateTask":184,"../sink/Pipe":191}],145:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -31300,7 +37919,7 @@ var _prelude = require('@most/prelude');
 function ap(fs, xs) {
   return (0, _combine.combine)(_prelude.apply, fs, xs);
 }
-},{"./combine":131,"@most/prelude":107}],130:[function(require,module,exports){
+},{"./combine":147,"@most/prelude":123}],146:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -31337,7 +37956,7 @@ function concat(left, right) {
     return right;
   }, left);
 }
-},{"../source/core":179,"./continueWith":133}],131:[function(require,module,exports){
+},{"../source/core":195,"./continueWith":149}],147:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -31488,7 +38107,7 @@ CombineSink.prototype.end = function (t, indexedValue) {
     this.sink.end(t, indexedValue.value);
   }
 };
-},{"../Stream":127,"../disposable/dispose":155,"../invoke":161,"../sink/IndexSink":174,"../sink/Pipe":175,"../source/core":179,"./transform":151,"@most/prelude":107}],132:[function(require,module,exports){
+},{"../Stream":143,"../disposable/dispose":171,"../invoke":177,"../sink/IndexSink":190,"../sink/Pipe":191,"../source/core":195,"./transform":167,"@most/prelude":123}],148:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -31514,7 +38133,7 @@ function concatMap(f, stream) {
 } /** @license MIT License (c) copyright 2010-2016 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
-},{"./mergeConcurrently":141}],133:[function(require,module,exports){
+},{"./mergeConcurrently":157}],149:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -31595,7 +38214,7 @@ ContinueWithSink.prototype.dispose = function () {
   this.active = false;
   return this.disposable.dispose();
 };
-},{"../Stream":127,"../disposable/dispose":155,"../sink/Pipe":175}],134:[function(require,module,exports){
+},{"../Stream":143,"../disposable/dispose":171,"../sink/Pipe":191}],150:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -31668,7 +38287,7 @@ DelaySink.prototype.end = function (t, x) {
 };
 
 DelaySink.prototype.error = _Pipe2.default.prototype.error;
-},{"../Stream":127,"../disposable/dispose":155,"../scheduler/PropagateTask":168,"../sink/Pipe":175}],135:[function(require,module,exports){
+},{"../Stream":143,"../disposable/dispose":171,"../scheduler/PropagateTask":184,"../sink/Pipe":191}],151:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -31785,7 +38404,7 @@ RecoverWithSink.prototype._continue = function (f, x, sink) {
 RecoverWithSink.prototype.dispose = function () {
   return this.disposable.dispose();
 };
-},{"../Stream":127,"../disposable/dispose":155,"../scheduler/PropagateTask":168,"../sink/SafeSink":176,"../source/tryEvent":187}],136:[function(require,module,exports){
+},{"../Stream":143,"../disposable/dispose":171,"../scheduler/PropagateTask":184,"../sink/SafeSink":192,"../source/tryEvent":203}],152:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -31875,7 +38494,7 @@ SkipRepeatsSink.prototype.event = function (t, x) {
 function same(a, b) {
   return a === b;
 }
-},{"../Stream":127,"../fusion/Filter":157,"../sink/Pipe":175}],137:[function(require,module,exports){
+},{"../Stream":143,"../fusion/Filter":173,"../sink/Pipe":191}],153:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -31910,7 +38529,7 @@ function flatMap(f, stream) {
 function join(stream) {
   return (0, _mergeConcurrently.mergeConcurrently)(Infinity, stream);
 }
-},{"./mergeConcurrently":141}],138:[function(require,module,exports){
+},{"./mergeConcurrently":157}],154:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -31927,10 +38546,6 @@ var _Pipe = require('../sink/Pipe');
 
 var _Pipe2 = _interopRequireDefault(_Pipe);
 
-var _PropagateTask = require('../scheduler/PropagateTask');
-
-var _PropagateTask2 = _interopRequireDefault(_PropagateTask);
-
 var _Map = require('../fusion/Map');
 
 var _Map2 = _interopRequireDefault(_Map);
@@ -31943,13 +38558,11 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
  * @param {Stream} stream
  * @returns {Stream}
  */
-/** @license MIT License (c) copyright 2010-2016 original author or authors */
-/** @author Brian Cavalier */
-/** @author John Hann */
-
 function throttle(period, stream) {
   return new _Stream2.default(throttleSource(period, stream.source));
-}
+} /** @license MIT License (c) copyright 2010-2016 original author or authors */
+/** @author Brian Cavalier */
+/** @author John Hann */
 
 function throttleSource(period, source) {
   return source instanceof _Map2.default ? commuteMapThrottle(period, source) : source instanceof Throttle ? fuseThrottle(period, source) : new Throttle(period, source);
@@ -32021,7 +38634,12 @@ function DebounceSink(dt, source, sink, scheduler) {
 DebounceSink.prototype.event = function (t, x) {
   this._clearTimer();
   this.value = x;
-  this.timer = this.scheduler.delay(this.dt, _PropagateTask2.default.event(x, this.sink));
+  this.timer = this.scheduler.delay(this.dt, new DebounceTask(this, x));
+};
+
+DebounceSink.prototype._event = function (t, x) {
+  this._clearTimer();
+  this.sink.event(t, x);
 };
 
 DebounceSink.prototype.end = function (t, x) {
@@ -32050,7 +38668,22 @@ DebounceSink.prototype._clearTimer = function () {
   this.timer = null;
   return true;
 };
-},{"../Stream":127,"../fusion/Map":159,"../scheduler/PropagateTask":168,"../sink/Pipe":175}],139:[function(require,module,exports){
+
+function DebounceTask(debounce, value) {
+  this.debounce = debounce;
+  this.value = value;
+}
+
+DebounceTask.prototype.run = function (t) {
+  this.debounce._event(t, this.value);
+};
+
+DebounceTask.prototype.error = function (t, e) {
+  this.debounce.error(t, e);
+};
+
+DebounceTask.prototype.dispose = function () {};
+},{"../Stream":143,"../fusion/Map":175,"../sink/Pipe":191}],155:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -32114,7 +38747,7 @@ LoopSink.prototype.event = function (t, x) {
 LoopSink.prototype.end = function (t) {
   this.sink.end(t, this.seed);
 };
-},{"../Stream":127,"../sink/Pipe":175}],140:[function(require,module,exports){
+},{"../Stream":143,"../sink/Pipe":191}],156:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -32161,7 +38794,7 @@ var reduce = base.reduce;
  * list in time order.  If two events are simultaneous they will be merged in
  * arbitrary order.
  */
-function merge() /* ...streams*/{
+function merge() /* ...streams */{
   return mergeArray(copy(arguments));
 }
 
@@ -32233,7 +38866,7 @@ MergeSink.prototype.end = function (t, indexedValue) {
     this.sink.end(t, indexedValue.value);
   }
 };
-},{"../Stream":127,"../disposable/dispose":155,"../sink/IndexSink":174,"../sink/Pipe":175,"../source/core":179,"@most/prelude":107}],141:[function(require,module,exports){
+},{"../Stream":143,"../disposable/dispose":171,"../sink/IndexSink":190,"../sink/Pipe":191,"../source/core":195,"@most/prelude":123}],157:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -32380,7 +39013,7 @@ Inner.prototype.error = function (t, e) {
 Inner.prototype.dispose = function () {
   return this.disposable.dispose();
 };
-},{"../LinkedList":124,"../Stream":127,"../disposable/dispose":155,"@most/prelude":107}],142:[function(require,module,exports){
+},{"../LinkedList":140,"../Stream":143,"../disposable/dispose":171,"@most/prelude":123}],158:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -32418,7 +39051,7 @@ function observe(f, stream) {
 function drain(stream) {
   return (0, _runSource.withDefaultScheduler)(stream.source);
 }
-},{"../runSource":166,"./transform":151}],143:[function(require,module,exports){
+},{"../runSource":182,"./transform":167}],159:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -32522,7 +39155,7 @@ AwaitSink.prototype._event = function (promise) {
 AwaitSink.prototype._end = function (x) {
   return Promise.resolve(x).then(this._endBound);
 };
-},{"../Stream":127,"../fatalError":156,"../source/core":179}],144:[function(require,module,exports){
+},{"../Stream":143,"../fatalError":172,"../source/core":195}],160:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -32659,7 +39292,7 @@ function hasValue(hold) {
 function getValue(hold) {
   return hold.value;
 }
-},{"../Stream":127,"../disposable/dispose":155,"../invoke":161,"../sink/Pipe":175,"@most/prelude":107}],145:[function(require,module,exports){
+},{"../Stream":143,"../disposable/dispose":171,"../invoke":177,"../sink/Pipe":191,"@most/prelude":123}],161:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -32897,7 +39530,7 @@ SkipAfterSink.prototype.event = function event(t, x) {
 
 SkipAfterSink.prototype.end = _Pipe2.default.prototype.end;
 SkipAfterSink.prototype.error = _Pipe2.default.prototype.error;
-},{"../Stream":127,"../disposable/dispose":155,"../fusion/Map":159,"../sink/Pipe":175,"../source/core":179}],146:[function(require,module,exports){
+},{"../Stream":143,"../disposable/dispose":171,"../fusion/Map":175,"../sink/Pipe":191,"../source/core":195}],162:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -33026,7 +39659,7 @@ Segment.prototype._dispose = function (t) {
   this.max = t;
   dispose.tryDispose(t, this.disposable, this.sink);
 };
-},{"../Stream":127,"../disposable/dispose":155}],147:[function(require,module,exports){
+},{"../Stream":143,"../disposable/dispose":171}],163:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -33040,7 +39673,7 @@ exports.thru = thru;
 function thru(f, stream) {
   return f(stream);
 }
-},{}],148:[function(require,module,exports){
+},{}],164:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -33175,7 +39808,7 @@ UpperBound.prototype.dispose = function () {
 };
 
 function noop() {}
-},{"../Stream":127,"../combinator/flatMap":137,"../disposable/dispose":155,"../sink/Pipe":175}],149:[function(require,module,exports){
+},{"../Stream":143,"../combinator/flatMap":153,"../disposable/dispose":171,"../sink/Pipe":191}],165:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -33219,7 +39852,7 @@ TimestampSink.prototype.error = _Pipe2.default.prototype.error;
 TimestampSink.prototype.event = function (t, x) {
   this.sink.event(t, { time: t, value: x });
 };
-},{"../Stream":127,"../sink/Pipe":175}],150:[function(require,module,exports){
+},{"../Stream":143,"../sink/Pipe":191}],166:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -33346,7 +39979,7 @@ LegacyTxAdapter.prototype.isReduced = function (x) {
 LegacyTxAdapter.prototype.getResult = function (x) {
   return x.value;
 };
-},{"../Stream":127}],151:[function(require,module,exports){
+},{"../Stream":143}],167:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -33429,7 +40062,7 @@ TapSink.prototype.event = function (t, x) {
   f(x);
   this.sink.event(t, x);
 };
-},{"../Stream":127,"../fusion/Map":159,"../sink/Pipe":175}],152:[function(require,module,exports){
+},{"../Stream":143,"../fusion/Map":175,"../sink/Pipe":191}],168:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -33598,7 +40231,7 @@ function ready(buffers) {
   }
   return true;
 }
-},{"../Queue":126,"../Stream":127,"../disposable/dispose":155,"../invoke":161,"../sink/IndexSink":174,"../sink/Pipe":175,"../source/core":179,"./transform":151,"@most/prelude":107}],153:[function(require,module,exports){
+},{"../Queue":142,"../Stream":143,"../disposable/dispose":171,"../invoke":177,"../sink/IndexSink":190,"../sink/Pipe":191,"../source/core":195,"./transform":167,"@most/prelude":123}],169:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -33623,7 +40256,7 @@ function Disposable(dispose, data) {
 Disposable.prototype.dispose = function () {
   return this._dispose(this._data);
 };
-},{}],154:[function(require,module,exports){
+},{}],170:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -33670,7 +40303,7 @@ SettableDisposable.prototype.dispose = function () {
 
   return this.result;
 };
-},{}],155:[function(require,module,exports){
+},{}],171:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -33813,7 +40446,7 @@ function disposeMemoized(memoized) {
 function memoized(disposable) {
   return { disposed: false, disposable: disposable, value: void 0 };
 }
-},{"../Promise":125,"./Disposable":153,"./SettableDisposable":154,"@most/prelude":107}],156:[function(require,module,exports){
+},{"../Promise":141,"./Disposable":169,"./SettableDisposable":170,"@most/prelude":123}],172:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -33829,7 +40462,7 @@ function fatalError(e) {
     throw e;
   }, 0);
 }
-},{}],157:[function(require,module,exports){
+},{}],173:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -33888,7 +40521,7 @@ function and(p, q) {
     return p(x) && q(x);
   };
 }
-},{"../sink/Pipe":175}],158:[function(require,module,exports){
+},{"../sink/Pipe":191}],174:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -33928,7 +40561,7 @@ FilterMapSink.prototype.event = function (t, x) {
 
 FilterMapSink.prototype.end = _Pipe2.default.prototype.end;
 FilterMapSink.prototype.error = _Pipe2.default.prototype.error;
-},{"../sink/Pipe":175}],159:[function(require,module,exports){
+},{"../sink/Pipe":191}],175:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -34001,7 +40634,7 @@ MapSink.prototype.event = function (t, x) {
   var f = this.f;
   this.sink.event(t, f(x));
 };
-},{"../sink/Pipe":175,"./Filter":157,"./FilterMap":158,"@most/prelude":107}],160:[function(require,module,exports){
+},{"../sink/Pipe":191,"./Filter":173,"./FilterMap":174,"@most/prelude":123}],176:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -34138,6 +40771,8 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 /** @license MIT License (c) copyright 2010-2016 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
+
+/* eslint import/first: 0 */
 
 exports.Stream = _Stream2.default;
 
@@ -34446,7 +41081,7 @@ exports.mergeArray = _merge.mergeArray;
  * arbitrary order.
  */
 
-_Stream2.default.prototype.merge = function () /* ...streams*/{
+_Stream2.default.prototype.merge = function () /* ...streams */{
   return (0, _merge.mergeArray)(base.cons(this, arguments));
 };
 
@@ -34463,7 +41098,7 @@ exports.combineArray = _combine.combineArray;
  *  event of each input stream, whenever a new event arrives on any stream.
  */
 
-_Stream2.default.prototype.combine = function (f /*, ...streams*/) {
+_Stream2.default.prototype.combine = function (f /*, ...streams */) {
   return (0, _combine.combineArray)(f, base.replace(this, 0, arguments));
 };
 
@@ -34509,7 +41144,7 @@ exports.zipArray = _zip.zipArray;
  * @returns {Stream} new stream containing pairs
  */
 
-_Stream2.default.prototype.zip = function (f /*, ...streams*/) {
+_Stream2.default.prototype.zip = function (f /*, ...streams */) {
   return (0, _zip.zipArray)(f, base.replace(this, 0, arguments));
 };
 
@@ -34835,7 +41470,7 @@ exports.defaultScheduler = _defaultScheduler2.default;
 // export an implementation of Task used internally for third-party libraries
 
 exports.PropagateTask = _PropagateTask2.default;
-},{"./Stream":127,"./combinator/accumulate":128,"./combinator/applicative":129,"./combinator/build":130,"./combinator/combine":131,"./combinator/concatMap":132,"./combinator/continueWith":133,"./combinator/delay":134,"./combinator/errors":135,"./combinator/filter":136,"./combinator/flatMap":137,"./combinator/limit":138,"./combinator/loop":139,"./combinator/merge":140,"./combinator/mergeConcurrently":141,"./combinator/observe":142,"./combinator/promises":143,"./combinator/sample":144,"./combinator/slice":145,"./combinator/switch":146,"./combinator/thru":147,"./combinator/timeslice":148,"./combinator/timestamp":149,"./combinator/transduce":150,"./combinator/transform":151,"./combinator/zip":152,"./observable/subscribe":165,"./scheduler/PropagateTask":168,"./scheduler/defaultScheduler":172,"./source/core":179,"./source/from":180,"./source/fromEvent":182,"./source/generate":184,"./source/iterate":185,"./source/periodic":186,"./source/unfold":188,"@most/multicast":106,"@most/prelude":107,"symbol-observable":190}],161:[function(require,module,exports){
+},{"./Stream":143,"./combinator/accumulate":144,"./combinator/applicative":145,"./combinator/build":146,"./combinator/combine":147,"./combinator/concatMap":148,"./combinator/continueWith":149,"./combinator/delay":150,"./combinator/errors":151,"./combinator/filter":152,"./combinator/flatMap":153,"./combinator/limit":154,"./combinator/loop":155,"./combinator/merge":156,"./combinator/mergeConcurrently":157,"./combinator/observe":158,"./combinator/promises":159,"./combinator/sample":160,"./combinator/slice":161,"./combinator/switch":162,"./combinator/thru":163,"./combinator/timeslice":164,"./combinator/timestamp":165,"./combinator/transduce":166,"./combinator/transform":167,"./combinator/zip":168,"./observable/subscribe":181,"./scheduler/PropagateTask":184,"./scheduler/defaultScheduler":188,"./source/core":195,"./source/from":196,"./source/fromEvent":198,"./source/generate":200,"./source/iterate":201,"./source/periodic":202,"./source/unfold":204,"@most/multicast":122,"@most/prelude":123,"symbol-observable":206}],177:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -34847,7 +41482,7 @@ exports.default = invoke;
 /** @author John Hann */
 
 function invoke(f, args) {
-  /*eslint complexity: [2,7]*/
+  /* eslint complexity: [2,7] */
   switch (args.length) {
     case 0:
       return f();
@@ -34865,7 +41500,7 @@ function invoke(f, args) {
       return f.apply(void 0, args);
   }
 }
-},{}],162:[function(require,module,exports){
+},{}],178:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -34878,14 +41513,14 @@ exports.makeIterable = makeIterable;
 /** @author Brian Cavalier */
 /** @author John Hann */
 
-/*global Set, Symbol*/
+/* global Set, Symbol */
 var iteratorSymbol;
 // Firefox ships a partial implementation using the name @@iterator.
 // https://bugzilla.mozilla.org/show_bug.cgi?id=907077#c14
 if (typeof Set === 'function' && typeof new Set()['@@iterator'] === 'function') {
   iteratorSymbol = '@@iterator';
 } else {
-  iteratorSymbol = typeof Symbol === 'function' && Symbol.iterator || '_es6shim_iterator_';
+  iteratorSymbol = typeof Symbol === 'function' ? Symbol.iterator : '_es6shim_iterator_';
 }
 
 function isIterable(o) {
@@ -34900,7 +41535,7 @@ function makeIterable(f, o) {
   o[iteratorSymbol] = f;
   return o;
 }
-},{}],163:[function(require,module,exports){
+},{}],179:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -34965,7 +41600,7 @@ SubscriberSink.prototype.error = function (e) {
 function unsubscribe(subscription) {
   return subscription.unsubscribe();
 }
-},{"../Stream":127,"../disposable/dispose":155,"../source/tryEvent":187}],164:[function(require,module,exports){
+},{"../Stream":143,"../disposable/dispose":171,"../source/tryEvent":203}],180:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -34997,7 +41632,7 @@ function getObservable(o) {
 } /** @license MIT License (c) copyright 2010-2016 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
-},{"symbol-observable":190}],165:[function(require,module,exports){
+},{"symbol-observable":206}],181:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -35091,7 +41726,7 @@ function throwError(e1, subscriber, throwError) {
     throwError(e1);
   }
 }
-},{"../disposable/dispose":155,"../fatalError":156,"../scheduler/defaultScheduler":172}],166:[function(require,module,exports){
+},{"../disposable/dispose":171,"../fatalError":172,"../scheduler/defaultScheduler":188}],182:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -35160,7 +41795,7 @@ function disposeThen(end, error, disposable, x) {
     end(x);
   }, error);
 }
-},{"./disposable/dispose":155,"./scheduler/defaultScheduler":172}],167:[function(require,module,exports){
+},{"./disposable/dispose":171,"./scheduler/defaultScheduler":188}],183:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -35170,7 +41805,7 @@ exports.default = ClockTimer;
 
 var _task = require('../task');
 
-/*global setTimeout, clearTimeout*/
+/* global setTimeout, clearTimeout */
 
 function ClockTimer() {} /** @license MIT License (c) copyright 2010-2016 original author or authors */
 /** @author Brian Cavalier */
@@ -35208,7 +41843,7 @@ function runAsap(f) {
   (0, _task.defer)(task);
   return task;
 }
-},{"../task":189}],168:[function(require,module,exports){
+},{"../task":205}],184:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -35272,7 +41907,7 @@ function emit(t, x, sink) {
 function end(t, x, sink) {
   sink.end(t, x);
 }
-},{"../fatalError":156}],169:[function(require,module,exports){
+},{"../fatalError":172}],185:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -35303,7 +41938,7 @@ ScheduledTask.prototype.dispose = function () {
   this.scheduler.cancel(this);
   return this.task.dispose();
 };
-},{}],170:[function(require,module,exports){
+},{}],186:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -35413,7 +42048,7 @@ Scheduler.prototype._runReadyTasks = function (now) {
   this.timeline.runTasks(now, _task.runTask);
   this._scheduleNextRun(this.now());
 };
-},{"../task":189,"./ScheduledTask":169}],171:[function(require,module,exports){
+},{"../task":205,"./ScheduledTask":185}],187:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -35555,7 +42190,7 @@ function binarySearch(t, sortedArray) {
 function newTimeslot(t, events) {
   return { time: t, events: events };
 }
-},{"@most/prelude":107}],172:[function(require,module,exports){
+},{"@most/prelude":123}],188:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -35581,7 +42216,7 @@ var defaultScheduler = new _Scheduler2.default(new _ClockTimer2.default(), new _
 /** @author John Hann */
 
 exports.default = defaultScheduler;
-},{"./ClockTimer":167,"./Scheduler":170,"./Timeline":171}],173:[function(require,module,exports){
+},{"./ClockTimer":183,"./Scheduler":186,"./Timeline":187}],189:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -35681,7 +42316,7 @@ ErrorTask.prototype.run = function () {
 ErrorTask.prototype.error = function (e) {
   throw e;
 };
-},{"../task":189}],174:[function(require,module,exports){
+},{"../task":205}],190:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -35721,7 +42356,7 @@ IndexSink.prototype.end = function (t, x) {
 };
 
 IndexSink.prototype.error = _Pipe2.default.prototype.error;
-},{"./Pipe":175}],175:[function(require,module,exports){
+},{"./Pipe":191}],191:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -35753,7 +42388,7 @@ Pipe.prototype.end = function (t, x) {
 Pipe.prototype.error = function (t, e) {
   return this.sink.error(t, e);
 };
-},{}],176:[function(require,module,exports){
+},{}],192:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -35793,7 +42428,7 @@ SafeSink.prototype.disable = function () {
   this.active = false;
   return this.sink;
 };
-},{}],177:[function(require,module,exports){
+},{}],193:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -35856,7 +42491,7 @@ function disposeEventEmitter(info) {
   var target = info.target;
   target.source.removeListener(target.event, info.addEvent);
 }
-},{"../disposable/dispose":155,"../sink/DeferredSink":173,"./tryEvent":187}],178:[function(require,module,exports){
+},{"../disposable/dispose":171,"../sink/DeferredSink":189,"./tryEvent":203}],194:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -35898,7 +42533,7 @@ function disposeEventTarget(info) {
   var target = info.target;
   target.source.removeEventListener(target.event, info.addEvent, target.capture);
 }
-},{"../disposable/dispose":155,"./tryEvent":187}],179:[function(require,module,exports){
+},{"../disposable/dispose":171,"./tryEvent":203}],195:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -35986,7 +42621,7 @@ NeverSource.prototype.run = function () {
 };
 
 var NEVER = new _Stream2.default(new NeverSource());
-},{"../Stream":127,"../disposable/dispose":155,"../scheduler/PropagateTask":168}],180:[function(require,module,exports){
+},{"../Stream":143,"../disposable/dispose":171,"../scheduler/PropagateTask":184}],196:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -36037,7 +42672,7 @@ function from(a) {
 } /** @license MIT License (c) copyright 2010-2016 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
-},{"../Stream":127,"../iterable":162,"../observable/fromObservable":163,"../observable/getObservable":164,"./fromArray":181,"./fromIterable":183,"@most/prelude":107}],181:[function(require,module,exports){
+},{"../Stream":143,"../iterable":178,"../observable/fromObservable":179,"../observable/getObservable":180,"./fromArray":197,"./fromIterable":199,"@most/prelude":123}],197:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -36078,7 +42713,7 @@ function runProducer(t, array, sink) {
 
   this.active && sink.end(t);
 }
-},{"../Stream":127,"../scheduler/PropagateTask":168}],182:[function(require,module,exports){
+},{"../Stream":143,"../scheduler/PropagateTask":184}],198:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -36129,7 +42764,7 @@ function fromEvent(event, source, capture) {
 } /** @license MIT License (c) copyright 2010-2016 original author or authors */
 /** @author Brian Cavalier */
 /** @author John Hann */
-},{"../Stream":127,"./EventEmitterSource":177,"./EventTargetSource":178}],183:[function(require,module,exports){
+},{"../Stream":143,"./EventEmitterSource":193,"./EventTargetSource":194}],199:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -36173,7 +42808,7 @@ function runProducer(t, iterator, sink) {
 
   sink.end(t, r.value);
 }
-},{"../Stream":127,"../iterable":162,"../scheduler/PropagateTask":168}],184:[function(require,module,exports){
+},{"../Stream":143,"../iterable":178,"../scheduler/PropagateTask":184}],200:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -36258,7 +42893,7 @@ function error(generate, e) {
 Generate.prototype.dispose = function () {
   this.active = false;
 };
-},{"../Stream":127,"@most/prelude":107}],185:[function(require,module,exports){
+},{"../Stream":143,"@most/prelude":123}],201:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -36334,7 +42969,7 @@ function stepIterate(iterate, x) {
 function continueIterate(iterate, x) {
   return !iterate.active ? iterate.value : stepIterate(iterate, x);
 }
-},{"../Stream":127}],186:[function(require,module,exports){
+},{"../Stream":143}],202:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -36374,7 +43009,7 @@ function Periodic(period, value) {
 Periodic.prototype.run = function (sink, scheduler) {
   return scheduler.periodic(this.period, _PropagateTask2.default.event(this.value, sink));
 };
-},{"../Stream":127,"../scheduler/PropagateTask":168}],187:[function(require,module,exports){
+},{"../Stream":143,"../scheduler/PropagateTask":184}],203:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -36401,7 +43036,7 @@ function tryEnd(t, x, sink) {
     sink.error(t, e);
   }
 }
-},{}],188:[function(require,module,exports){
+},{}],204:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -36482,7 +43117,7 @@ function continueUnfold(unfold, tuple) {
   }
   return stepUnfold(unfold, tuple.seed);
 }
-},{"../Stream":127}],189:[function(require,module,exports){
+},{"../Stream":143}],205:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -36505,10 +43140,7 @@ function runTask(task) {
     return task.error(e);
   }
 }
-},{}],190:[function(require,module,exports){
-module.exports = require('./lib/index');
-
-},{"./lib/index":191}],191:[function(require,module,exports){
+},{}],206:[function(require,module,exports){
 (function (global){
 'use strict';
 
@@ -36540,7 +43172,7 @@ if (typeof self !== 'undefined') {
 var result = (0, _ponyfill2['default'])(root);
 exports['default'] = result;
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./ponyfill.js":192}],192:[function(require,module,exports){
+},{"./ponyfill.js":207}],207:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -36564,16 +43196,16 @@ function symbolObservablePonyfill(root) {
 
 	return result;
 };
-},{}],193:[function(require,module,exports){
+},{}],208:[function(require,module,exports){
 (function (process){
 'use strict';
 
 if (!process.version ||
     process.version.indexOf('v0.') === 0 ||
     process.version.indexOf('v1.') === 0 && process.version.indexOf('v1.8.') !== 0) {
-  module.exports = nextTick;
+  module.exports = { nextTick: nextTick };
 } else {
-  module.exports = process.nextTick;
+  module.exports = process
 }
 
 function nextTick(fn, arg1, arg2, arg3) {
@@ -36610,8 +43242,9 @@ function nextTick(fn, arg1, arg2, arg3) {
   }
 }
 
+
 }).call(this,require('_process'))
-},{"_process":194}],194:[function(require,module,exports){
+},{"_process":209}],209:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -36797,10 +43430,10 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],195:[function(require,module,exports){
+},{}],210:[function(require,module,exports){
 module.exports = require('./lib/_stream_duplex.js');
 
-},{"./lib/_stream_duplex.js":196}],196:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":211}],211:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -36831,7 +43464,7 @@ module.exports = require('./lib/_stream_duplex.js');
 
 /*<replacement>*/
 
-var processNextTick = require('process-nextick-args');
+var pna = require('process-nextick-args');
 /*</replacement>*/
 
 /*<replacement>*/
@@ -36855,10 +43488,13 @@ var Writable = require('./_stream_writable');
 
 util.inherits(Duplex, Readable);
 
-var keys = objectKeys(Writable.prototype);
-for (var v = 0; v < keys.length; v++) {
-  var method = keys[v];
-  if (!Duplex.prototype[method]) Duplex.prototype[method] = Writable.prototype[method];
+{
+  // avoid scope creep, the keys array can then be collected
+  var keys = objectKeys(Writable.prototype);
+  for (var v = 0; v < keys.length; v++) {
+    var method = keys[v];
+    if (!Duplex.prototype[method]) Duplex.prototype[method] = Writable.prototype[method];
+  }
 }
 
 function Duplex(options) {
@@ -36877,6 +43513,16 @@ function Duplex(options) {
   this.once('end', onend);
 }
 
+Object.defineProperty(Duplex.prototype, 'writableHighWaterMark', {
+  // making it explicit this property is not enumerable
+  // because otherwise some prototype manipulation in
+  // userland will fail
+  enumerable: false,
+  get: function () {
+    return this._writableState.highWaterMark;
+  }
+});
+
 // the no-half-open enforcer
 function onend() {
   // if we allow half-open state, or if the writable side ended,
@@ -36885,7 +43531,7 @@ function onend() {
 
   // no more data can be written.
   // But allow more writes to happen in this tick.
-  processNextTick(onEndNT, this);
+  pna.nextTick(onEndNT, this);
 }
 
 function onEndNT(self) {
@@ -36917,15 +43563,9 @@ Duplex.prototype._destroy = function (err, cb) {
   this.push(null);
   this.end();
 
-  processNextTick(cb, err);
+  pna.nextTick(cb, err);
 };
-
-function forEach(xs, f) {
-  for (var i = 0, l = xs.length; i < l; i++) {
-    f(xs[i], i);
-  }
-}
-},{"./_stream_readable":198,"./_stream_writable":200,"core-util-is":112,"inherits":115,"process-nextick-args":193}],197:[function(require,module,exports){
+},{"./_stream_readable":213,"./_stream_writable":215,"core-util-is":128,"inherits":131,"process-nextick-args":208}],212:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -36973,7 +43613,7 @@ function PassThrough(options) {
 PassThrough.prototype._transform = function (chunk, encoding, cb) {
   cb(null, chunk);
 };
-},{"./_stream_transform":199,"core-util-is":112,"inherits":115}],198:[function(require,module,exports){
+},{"./_stream_transform":214,"core-util-is":128,"inherits":131}],213:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -37000,7 +43640,7 @@ PassThrough.prototype._transform = function (chunk, encoding, cb) {
 
 /*<replacement>*/
 
-var processNextTick = require('process-nextick-args');
+var pna = require('process-nextick-args');
 /*</replacement>*/
 
 module.exports = Readable;
@@ -37027,9 +43667,8 @@ var EElistenerCount = function (emitter, type) {
 var Stream = require('./internal/streams/stream');
 /*</replacement>*/
 
-// TODO(bmeurer): Change this back to const once hole checks are
-// properly optimized away early in Ignition+TurboFan.
 /*<replacement>*/
+
 var Buffer = require('safe-buffer').Buffer;
 var OurUint8Array = global.Uint8Array || function () {};
 function _uint8ArrayToBuffer(chunk) {
@@ -37038,6 +43677,7 @@ function _uint8ArrayToBuffer(chunk) {
 function _isUint8Array(obj) {
   return Buffer.isBuffer(obj) || obj instanceof OurUint8Array;
 }
+
 /*</replacement>*/
 
 /*<replacement>*/
@@ -37066,15 +43706,13 @@ var kProxyEvents = ['error', 'close', 'destroy', 'pause', 'resume'];
 function prependListener(emitter, event, fn) {
   // Sadly this is not cacheable as some libraries bundle their own
   // event emitter implementation with them.
-  if (typeof emitter.prependListener === 'function') {
-    return emitter.prependListener(event, fn);
-  } else {
-    // This is a hack to make sure that our error handler is attached before any
-    // userland ones.  NEVER DO THIS. This is here only because this code needs
-    // to continue to work with older versions of Node.js that do not include
-    // the prependListener() method. The goal is to eventually remove this hack.
-    if (!emitter._events || !emitter._events[event]) emitter.on(event, fn);else if (isArray(emitter._events[event])) emitter._events[event].unshift(fn);else emitter._events[event] = [fn, emitter._events[event]];
-  }
+  if (typeof emitter.prependListener === 'function') return emitter.prependListener(event, fn);
+
+  // This is a hack to make sure that our error handler is attached before any
+  // userland ones.  NEVER DO THIS. This is here only because this code needs
+  // to continue to work with older versions of Node.js that do not include
+  // the prependListener() method. The goal is to eventually remove this hack.
+  if (!emitter._events || !emitter._events[event]) emitter.on(event, fn);else if (isArray(emitter._events[event])) emitter._events[event].unshift(fn);else emitter._events[event] = [fn, emitter._events[event]];
 }
 
 function ReadableState(options, stream) {
@@ -37082,17 +43720,26 @@ function ReadableState(options, stream) {
 
   options = options || {};
 
+  // Duplex streams are both readable and writable, but share
+  // the same options object.
+  // However, some cases require setting options to different
+  // values for the readable and the writable sides of the duplex stream.
+  // These options can be provided separately as readableXXX and writableXXX.
+  var isDuplex = stream instanceof Duplex;
+
   // object stream flag. Used to make read(n) ignore n and to
   // make all the buffer merging and length checks go away
   this.objectMode = !!options.objectMode;
 
-  if (stream instanceof Duplex) this.objectMode = this.objectMode || !!options.readableObjectMode;
+  if (isDuplex) this.objectMode = this.objectMode || !!options.readableObjectMode;
 
   // the point at which it stops calling _read() to fill the buffer
   // Note: 0 is a valid value, means "don't call _read preemptively ever"
   var hwm = options.highWaterMark;
+  var readableHwm = options.readableHighWaterMark;
   var defaultHwm = this.objectMode ? 16 : 16 * 1024;
-  this.highWaterMark = hwm || hwm === 0 ? hwm : defaultHwm;
+
+  if (hwm || hwm === 0) this.highWaterMark = hwm;else if (isDuplex && (readableHwm || readableHwm === 0)) this.highWaterMark = readableHwm;else this.highWaterMark = defaultHwm;
 
   // cast to ints.
   this.highWaterMark = Math.floor(this.highWaterMark);
@@ -37465,7 +44112,7 @@ function emitReadable(stream) {
   if (!state.emittedReadable) {
     debug('emitReadable', state.flowing);
     state.emittedReadable = true;
-    if (state.sync) processNextTick(emitReadable_, stream);else emitReadable_(stream);
+    if (state.sync) pna.nextTick(emitReadable_, stream);else emitReadable_(stream);
   }
 }
 
@@ -37484,7 +44131,7 @@ function emitReadable_(stream) {
 function maybeReadMore(stream, state) {
   if (!state.readingMore) {
     state.readingMore = true;
-    processNextTick(maybeReadMore_, stream, state);
+    pna.nextTick(maybeReadMore_, stream, state);
   }
 }
 
@@ -37529,7 +44176,7 @@ Readable.prototype.pipe = function (dest, pipeOpts) {
   var doEnd = (!pipeOpts || pipeOpts.end !== false) && dest !== process.stdout && dest !== process.stderr;
 
   var endFn = doEnd ? onend : unpipe;
-  if (state.endEmitted) processNextTick(endFn);else src.once('end', endFn);
+  if (state.endEmitted) pna.nextTick(endFn);else src.once('end', endFn);
 
   dest.on('unpipe', onunpipe);
   function onunpipe(readable, unpipeInfo) {
@@ -37719,7 +44366,7 @@ Readable.prototype.on = function (ev, fn) {
       state.readableListening = state.needReadable = true;
       state.emittedReadable = false;
       if (!state.reading) {
-        processNextTick(nReadingNextTick, this);
+        pna.nextTick(nReadingNextTick, this);
       } else if (state.length) {
         emitReadable(this);
       }
@@ -37750,7 +44397,7 @@ Readable.prototype.resume = function () {
 function resume(stream, state) {
   if (!state.resumeScheduled) {
     state.resumeScheduled = true;
-    processNextTick(resume_, stream, state);
+    pna.nextTick(resume_, stream, state);
   }
 }
 
@@ -37787,18 +44434,19 @@ function flow(stream) {
 // This is *not* part of the readable stream interface.
 // It is an ugly unfortunate mess of history.
 Readable.prototype.wrap = function (stream) {
+  var _this = this;
+
   var state = this._readableState;
   var paused = false;
 
-  var self = this;
   stream.on('end', function () {
     debug('wrapped end');
     if (state.decoder && !state.ended) {
       var chunk = state.decoder.end();
-      if (chunk && chunk.length) self.push(chunk);
+      if (chunk && chunk.length) _this.push(chunk);
     }
 
-    self.push(null);
+    _this.push(null);
   });
 
   stream.on('data', function (chunk) {
@@ -37808,7 +44456,7 @@ Readable.prototype.wrap = function (stream) {
     // don't skip over falsy values in objectMode
     if (state.objectMode && (chunk === null || chunk === undefined)) return;else if (!state.objectMode && (!chunk || !chunk.length)) return;
 
-    var ret = self.push(chunk);
+    var ret = _this.push(chunk);
     if (!ret) {
       paused = true;
       stream.pause();
@@ -37829,12 +44477,12 @@ Readable.prototype.wrap = function (stream) {
 
   // proxy certain important events.
   for (var n = 0; n < kProxyEvents.length; n++) {
-    stream.on(kProxyEvents[n], self.emit.bind(self, kProxyEvents[n]));
+    stream.on(kProxyEvents[n], this.emit.bind(this, kProxyEvents[n]));
   }
 
   // when we try to consume some more bytes, simply unpause the
   // underlying stream.
-  self._read = function (n) {
+  this._read = function (n) {
     debug('wrapped _read', n);
     if (paused) {
       paused = false;
@@ -37842,8 +44490,18 @@ Readable.prototype.wrap = function (stream) {
     }
   };
 
-  return self;
+  return this;
 };
+
+Object.defineProperty(Readable.prototype, 'readableHighWaterMark', {
+  // making it explicit this property is not enumerable
+  // because otherwise some prototype manipulation in
+  // userland will fail
+  enumerable: false,
+  get: function () {
+    return this._readableState.highWaterMark;
+  }
+});
 
 // exposed for testing purposes only.
 Readable._fromList = fromList;
@@ -37957,7 +44615,7 @@ function endReadable(stream) {
 
   if (!state.endEmitted) {
     state.ended = true;
-    processNextTick(endReadableNT, state, stream);
+    pna.nextTick(endReadableNT, state, stream);
   }
 }
 
@@ -37970,12 +44628,6 @@ function endReadableNT(state, stream) {
   }
 }
 
-function forEach(xs, f) {
-  for (var i = 0, l = xs.length; i < l; i++) {
-    f(xs[i], i);
-  }
-}
-
 function indexOf(xs, x) {
   for (var i = 0, l = xs.length; i < l; i++) {
     if (xs[i] === x) return i;
@@ -37983,7 +44635,7 @@ function indexOf(xs, x) {
   return -1;
 }
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./_stream_duplex":196,"./internal/streams/BufferList":201,"./internal/streams/destroy":202,"./internal/streams/stream":203,"_process":194,"core-util-is":112,"events":113,"inherits":115,"isarray":117,"process-nextick-args":193,"safe-buffer":208,"string_decoder/":210,"util":109}],199:[function(require,module,exports){
+},{"./_stream_duplex":211,"./internal/streams/BufferList":216,"./internal/streams/destroy":217,"./internal/streams/stream":218,"_process":209,"core-util-is":128,"events":129,"inherits":131,"isarray":133,"process-nextick-args":208,"safe-buffer":223,"string_decoder/":225,"util":125}],214:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -38060,39 +44712,28 @@ util.inherits = require('inherits');
 
 util.inherits(Transform, Duplex);
 
-function TransformState(stream) {
-  this.afterTransform = function (er, data) {
-    return afterTransform(stream, er, data);
-  };
-
-  this.needTransform = false;
-  this.transforming = false;
-  this.writecb = null;
-  this.writechunk = null;
-  this.writeencoding = null;
-}
-
-function afterTransform(stream, er, data) {
-  var ts = stream._transformState;
+function afterTransform(er, data) {
+  var ts = this._transformState;
   ts.transforming = false;
 
   var cb = ts.writecb;
 
   if (!cb) {
-    return stream.emit('error', new Error('write callback called multiple times'));
+    return this.emit('error', new Error('write callback called multiple times'));
   }
 
   ts.writechunk = null;
   ts.writecb = null;
 
-  if (data !== null && data !== undefined) stream.push(data);
+  if (data != null) // single equals check for both `null` and `undefined`
+    this.push(data);
 
   cb(er);
 
-  var rs = stream._readableState;
+  var rs = this._readableState;
   rs.reading = false;
   if (rs.needReadable || rs.length < rs.highWaterMark) {
-    stream._read(rs.highWaterMark);
+    this._read(rs.highWaterMark);
   }
 }
 
@@ -38101,9 +44742,14 @@ function Transform(options) {
 
   Duplex.call(this, options);
 
-  this._transformState = new TransformState(this);
-
-  var stream = this;
+  this._transformState = {
+    afterTransform: afterTransform.bind(this),
+    needTransform: false,
+    transforming: false,
+    writecb: null,
+    writechunk: null,
+    writeencoding: null
+  };
 
   // start out asking for a readable event once data is transformed.
   this._readableState.needReadable = true;
@@ -38120,11 +44766,19 @@ function Transform(options) {
   }
 
   // When the writable side finishes, then flush out anything remaining.
-  this.once('prefinish', function () {
-    if (typeof this._flush === 'function') this._flush(function (er, data) {
-      done(stream, er, data);
-    });else done(stream);
-  });
+  this.on('prefinish', prefinish);
+}
+
+function prefinish() {
+  var _this = this;
+
+  if (typeof this._flush === 'function') {
+    this._flush(function (er, data) {
+      done(_this, er, data);
+    });
+  } else {
+    done(this, null, null);
+  }
 }
 
 Transform.prototype.push = function (chunk, encoding) {
@@ -38174,32 +44828,30 @@ Transform.prototype._read = function (n) {
 };
 
 Transform.prototype._destroy = function (err, cb) {
-  var _this = this;
+  var _this2 = this;
 
   Duplex.prototype._destroy.call(this, err, function (err2) {
     cb(err2);
-    _this.emit('close');
+    _this2.emit('close');
   });
 };
 
 function done(stream, er, data) {
   if (er) return stream.emit('error', er);
 
-  if (data !== null && data !== undefined) stream.push(data);
+  if (data != null) // single equals check for both `null` and `undefined`
+    stream.push(data);
 
   // if there's nothing in the write buffer, then that means
   // that nothing more will ever be provided
-  var ws = stream._writableState;
-  var ts = stream._transformState;
+  if (stream._writableState.length) throw new Error('Calling transform done when ws.length != 0');
 
-  if (ws.length) throw new Error('Calling transform done when ws.length != 0');
-
-  if (ts.transforming) throw new Error('Calling transform done when still transforming');
+  if (stream._transformState.transforming) throw new Error('Calling transform done when still transforming');
 
   return stream.push(null);
 }
-},{"./_stream_duplex":196,"core-util-is":112,"inherits":115}],200:[function(require,module,exports){
-(function (process,global){
+},{"./_stream_duplex":211,"core-util-is":128,"inherits":131}],215:[function(require,module,exports){
+(function (process,global,setImmediate){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -38229,7 +44881,7 @@ function done(stream, er, data) {
 
 /*<replacement>*/
 
-var processNextTick = require('process-nextick-args');
+var pna = require('process-nextick-args');
 /*</replacement>*/
 
 module.exports = Writable;
@@ -38256,7 +44908,7 @@ function CorkedRequest(state) {
 /* </replacement> */
 
 /*<replacement>*/
-var asyncWrite = !process.browser && ['v0.10', 'v0.9.'].indexOf(process.version.slice(0, 5)) > -1 ? setImmediate : processNextTick;
+var asyncWrite = !process.browser && ['v0.10', 'v0.9.'].indexOf(process.version.slice(0, 5)) > -1 ? setImmediate : pna.nextTick;
 /*</replacement>*/
 
 /*<replacement>*/
@@ -38281,6 +44933,7 @@ var Stream = require('./internal/streams/stream');
 /*</replacement>*/
 
 /*<replacement>*/
+
 var Buffer = require('safe-buffer').Buffer;
 var OurUint8Array = global.Uint8Array || function () {};
 function _uint8ArrayToBuffer(chunk) {
@@ -38289,6 +44942,7 @@ function _uint8ArrayToBuffer(chunk) {
 function _isUint8Array(obj) {
   return Buffer.isBuffer(obj) || obj instanceof OurUint8Array;
 }
+
 /*</replacement>*/
 
 var destroyImpl = require('./internal/streams/destroy');
@@ -38302,18 +44956,27 @@ function WritableState(options, stream) {
 
   options = options || {};
 
+  // Duplex streams are both readable and writable, but share
+  // the same options object.
+  // However, some cases require setting options to different
+  // values for the readable and the writable sides of the duplex stream.
+  // These options can be provided separately as readableXXX and writableXXX.
+  var isDuplex = stream instanceof Duplex;
+
   // object stream flag to indicate whether or not this stream
   // contains buffers or objects.
   this.objectMode = !!options.objectMode;
 
-  if (stream instanceof Duplex) this.objectMode = this.objectMode || !!options.writableObjectMode;
+  if (isDuplex) this.objectMode = this.objectMode || !!options.writableObjectMode;
 
   // the point at which write() starts returning false
   // Note: 0 is a valid value, means that we always return false if
   // the entire buffer is not flushed immediately on write()
   var hwm = options.highWaterMark;
+  var writableHwm = options.writableHighWaterMark;
   var defaultHwm = this.objectMode ? 16 : 16 * 1024;
-  this.highWaterMark = hwm || hwm === 0 ? hwm : defaultHwm;
+
+  if (hwm || hwm === 0) this.highWaterMark = hwm;else if (isDuplex && (writableHwm || writableHwm === 0)) this.highWaterMark = writableHwm;else this.highWaterMark = defaultHwm;
 
   // cast to ints.
   this.highWaterMark = Math.floor(this.highWaterMark);
@@ -38427,6 +45090,7 @@ if (typeof Symbol === 'function' && Symbol.hasInstance && typeof Function.protot
   Object.defineProperty(Writable, Symbol.hasInstance, {
     value: function (object) {
       if (realHasInstance.call(this, object)) return true;
+      if (this !== Writable) return false;
 
       return object && object._writableState instanceof WritableState;
     }
@@ -38478,7 +45142,7 @@ function writeAfterEnd(stream, cb) {
   var er = new Error('write after end');
   // TODO: defer error events consistently everywhere, not just the cb
   stream.emit('error', er);
-  processNextTick(cb, er);
+  pna.nextTick(cb, er);
 }
 
 // Checks that a user-supplied chunk is valid, especially for the particular
@@ -38495,7 +45159,7 @@ function validChunk(stream, state, chunk, cb) {
   }
   if (er) {
     stream.emit('error', er);
-    processNextTick(cb, er);
+    pna.nextTick(cb, er);
     valid = false;
   }
   return valid;
@@ -38504,7 +45168,7 @@ function validChunk(stream, state, chunk, cb) {
 Writable.prototype.write = function (chunk, encoding, cb) {
   var state = this._writableState;
   var ret = false;
-  var isBuf = _isUint8Array(chunk) && !state.objectMode;
+  var isBuf = !state.objectMode && _isUint8Array(chunk);
 
   if (isBuf && !Buffer.isBuffer(chunk)) {
     chunk = _uint8ArrayToBuffer(chunk);
@@ -38557,6 +45221,16 @@ function decodeChunk(state, chunk, encoding) {
   }
   return chunk;
 }
+
+Object.defineProperty(Writable.prototype, 'writableHighWaterMark', {
+  // making it explicit this property is not enumerable
+  // because otherwise some prototype manipulation in
+  // userland will fail
+  enumerable: false,
+  get: function () {
+    return this._writableState.highWaterMark;
+  }
+});
 
 // if we're already writing something, then just put this
 // in the queue, and wait our turn.  Otherwise, call _write
@@ -38615,10 +45289,10 @@ function onwriteError(stream, state, sync, er, cb) {
   if (sync) {
     // defer the callback if we are being called synchronously
     // to avoid piling up things on the stack
-    processNextTick(cb, er);
+    pna.nextTick(cb, er);
     // this can emit finish, and it will always happen
     // after error
-    processNextTick(finishMaybe, stream, state);
+    pna.nextTick(finishMaybe, stream, state);
     stream._writableState.errorEmitted = true;
     stream.emit('error', er);
   } else {
@@ -38716,6 +45390,7 @@ function clearBuffer(stream, state) {
     } else {
       state.corkedRequestsFree = new CorkedRequest(state);
     }
+    state.bufferedRequestCount = 0;
   } else {
     // Slow case, write chunks one-by-one
     while (entry) {
@@ -38726,6 +45401,7 @@ function clearBuffer(stream, state) {
 
       doWrite(stream, state, false, len, chunk, encoding, cb);
       entry = entry.next;
+      state.bufferedRequestCount--;
       // if we didn't call the onwrite immediately, then
       // it means that we need to wait until it does.
       // also, that means that the chunk and cb are currently
@@ -38738,7 +45414,6 @@ function clearBuffer(stream, state) {
     if (entry === null) state.lastBufferedRequest = null;
   }
 
-  state.bufferedRequestCount = 0;
   state.bufferedRequest = entry;
   state.bufferProcessing = false;
 }
@@ -38792,7 +45467,7 @@ function prefinish(stream, state) {
     if (typeof stream._final === 'function') {
       state.pendingcb++;
       state.finalCalled = true;
-      processNextTick(callFinal, stream, state);
+      pna.nextTick(callFinal, stream, state);
     } else {
       state.prefinished = true;
       stream.emit('prefinish');
@@ -38816,7 +45491,7 @@ function endWritable(stream, state, cb) {
   state.ending = true;
   finishMaybe(stream, state);
   if (cb) {
-    if (state.finished) processNextTick(cb);else stream.once('finish', cb);
+    if (state.finished) pna.nextTick(cb);else stream.once('finish', cb);
   }
   state.ended = true;
   stream.writable = false;
@@ -38864,16 +45539,14 @@ Writable.prototype._destroy = function (err, cb) {
   this.end();
   cb(err);
 };
-}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./_stream_duplex":196,"./internal/streams/destroy":202,"./internal/streams/stream":203,"_process":194,"core-util-is":112,"inherits":115,"process-nextick-args":193,"safe-buffer":208,"util-deprecate":211}],201:[function(require,module,exports){
+}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("timers").setImmediate)
+},{"./_stream_duplex":211,"./internal/streams/destroy":217,"./internal/streams/stream":218,"_process":209,"core-util-is":128,"inherits":131,"process-nextick-args":208,"safe-buffer":223,"timers":226,"util-deprecate":227}],216:[function(require,module,exports){
 'use strict';
-
-/*<replacement>*/
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 var Buffer = require('safe-buffer').Buffer;
-/*</replacement>*/
+var util = require('util');
 
 function copyBuffer(src, target, offset) {
   src.copy(target, offset);
@@ -38940,12 +45613,19 @@ module.exports = function () {
 
   return BufferList;
 }();
-},{"safe-buffer":208}],202:[function(require,module,exports){
+
+if (util && util.inspect && util.inspect.custom) {
+  module.exports.prototype[util.inspect.custom] = function () {
+    var obj = util.inspect({ length: this.length });
+    return this.constructor.name + ' ' + obj;
+  };
+}
+},{"safe-buffer":223,"util":125}],217:[function(require,module,exports){
 'use strict';
 
 /*<replacement>*/
 
-var processNextTick = require('process-nextick-args');
+var pna = require('process-nextick-args');
 /*</replacement>*/
 
 // undocumented cb() API, needed for core, not for public API
@@ -38959,9 +45639,9 @@ function destroy(err, cb) {
     if (cb) {
       cb(err);
     } else if (err && (!this._writableState || !this._writableState.errorEmitted)) {
-      processNextTick(emitErrorNT, this, err);
+      pna.nextTick(emitErrorNT, this, err);
     }
-    return;
+    return this;
   }
 
   // we set destroyed to true before firing error callbacks in order
@@ -38978,7 +45658,7 @@ function destroy(err, cb) {
 
   this._destroy(err || null, function (err) {
     if (!cb && err) {
-      processNextTick(emitErrorNT, _this, err);
+      pna.nextTick(emitErrorNT, _this, err);
       if (_this._writableState) {
         _this._writableState.errorEmitted = true;
       }
@@ -38986,6 +45666,8 @@ function destroy(err, cb) {
       cb(err);
     }
   });
+
+  return this;
 }
 
 function undestroy() {
@@ -39013,13 +45695,13 @@ module.exports = {
   destroy: destroy,
   undestroy: undestroy
 };
-},{"process-nextick-args":193}],203:[function(require,module,exports){
+},{"process-nextick-args":208}],218:[function(require,module,exports){
 module.exports = require('events').EventEmitter;
 
-},{"events":113}],204:[function(require,module,exports){
+},{"events":129}],219:[function(require,module,exports){
 module.exports = require('./readable').PassThrough
 
-},{"./readable":205}],205:[function(require,module,exports){
+},{"./readable":220}],220:[function(require,module,exports){
 exports = module.exports = require('./lib/_stream_readable.js');
 exports.Stream = exports;
 exports.Readable = exports;
@@ -39028,13 +45710,13 @@ exports.Duplex = require('./lib/_stream_duplex.js');
 exports.Transform = require('./lib/_stream_transform.js');
 exports.PassThrough = require('./lib/_stream_passthrough.js');
 
-},{"./lib/_stream_duplex.js":196,"./lib/_stream_passthrough.js":197,"./lib/_stream_readable.js":198,"./lib/_stream_transform.js":199,"./lib/_stream_writable.js":200}],206:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":211,"./lib/_stream_passthrough.js":212,"./lib/_stream_readable.js":213,"./lib/_stream_transform.js":214,"./lib/_stream_writable.js":215}],221:[function(require,module,exports){
 module.exports = require('./readable').Transform
 
-},{"./readable":205}],207:[function(require,module,exports){
+},{"./readable":220}],222:[function(require,module,exports){
 module.exports = require('./lib/_stream_writable.js');
 
-},{"./lib/_stream_writable.js":200}],208:[function(require,module,exports){
+},{"./lib/_stream_writable.js":215}],223:[function(require,module,exports){
 /* eslint-disable node/no-deprecated-api */
 var buffer = require('buffer')
 var Buffer = buffer.Buffer
@@ -39098,7 +45780,7 @@ SafeBuffer.allocUnsafeSlow = function (size) {
   return buffer.SlowBuffer(size)
 }
 
-},{"buffer":111}],209:[function(require,module,exports){
+},{"buffer":127}],224:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -39227,10 +45909,34 @@ Stream.prototype.pipe = function(dest, options) {
   return dest;
 };
 
-},{"events":113,"inherits":115,"readable-stream/duplex.js":195,"readable-stream/passthrough.js":204,"readable-stream/readable.js":205,"readable-stream/transform.js":206,"readable-stream/writable.js":207}],210:[function(require,module,exports){
+},{"events":129,"inherits":131,"readable-stream/duplex.js":210,"readable-stream/passthrough.js":219,"readable-stream/readable.js":220,"readable-stream/transform.js":221,"readable-stream/writable.js":222}],225:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 'use strict';
 
+/*<replacement>*/
+
 var Buffer = require('safe-buffer').Buffer;
+/*</replacement>*/
 
 var isEncoding = Buffer.isEncoding || function (encoding) {
   encoding = '' + encoding;
@@ -39342,10 +46048,10 @@ StringDecoder.prototype.fillLast = function (buf) {
 };
 
 // Checks the type of a UTF-8 byte, whether it's ASCII, a leading byte, or a
-// continuation byte.
+// continuation byte. If an invalid byte is detected, -2 is returned.
 function utf8CheckByte(byte) {
   if (byte <= 0x7F) return 0;else if (byte >> 5 === 0x06) return 2;else if (byte >> 4 === 0x0E) return 3;else if (byte >> 3 === 0x1E) return 4;
-  return -1;
+  return byte >> 6 === 0x02 ? -1 : -2;
 }
 
 // Checks at most 3 bytes at the end of a Buffer in order to detect an
@@ -39359,13 +46065,13 @@ function utf8CheckIncomplete(self, buf, i) {
     if (nb > 0) self.lastNeed = nb - 1;
     return nb;
   }
-  if (--j < i) return 0;
+  if (--j < i || nb === -2) return 0;
   nb = utf8CheckByte(buf[j]);
   if (nb >= 0) {
     if (nb > 0) self.lastNeed = nb - 2;
     return nb;
   }
-  if (--j < i) return 0;
+  if (--j < i || nb === -2) return 0;
   nb = utf8CheckByte(buf[j]);
   if (nb >= 0) {
     if (nb > 0) {
@@ -39379,7 +46085,7 @@ function utf8CheckIncomplete(self, buf, i) {
 // Validates as many continuation bytes for a multi-byte UTF-8 character as
 // needed or are available. If we see a non-continuation byte where we expect
 // one, we "replace" the validated continuation bytes we've seen so far with
-// UTF-8 replacement characters ('\ufffd'), to match v8's UTF-8 decoding
+// a single UTF-8 replacement character ('\ufffd'), to match v8's UTF-8 decoding
 // behavior. The continuation byte check is included three times in the case
 // where all of the continuation bytes for a character exist in the same buffer.
 // It is also done this way as a slight performance increase instead of using a
@@ -39387,17 +46093,17 @@ function utf8CheckIncomplete(self, buf, i) {
 function utf8CheckExtraBytes(self, buf, p) {
   if ((buf[0] & 0xC0) !== 0x80) {
     self.lastNeed = 0;
-    return '\ufffd'.repeat(p);
+    return '\ufffd';
   }
   if (self.lastNeed > 1 && buf.length > 1) {
     if ((buf[1] & 0xC0) !== 0x80) {
       self.lastNeed = 1;
-      return '\ufffd'.repeat(p + 1);
+      return '\ufffd';
     }
     if (self.lastNeed > 2 && buf.length > 2) {
       if ((buf[2] & 0xC0) !== 0x80) {
         self.lastNeed = 2;
-        return '\ufffd'.repeat(p + 2);
+        return '\ufffd';
       }
     }
   }
@@ -39428,11 +46134,11 @@ function utf8Text(buf, i) {
   return buf.toString('utf8', i, end);
 }
 
-// For UTF-8, a replacement character for each buffered byte of a (partial)
-// character needs to be added to the output.
+// For UTF-8, a replacement character is added when ending on a partial
+// character.
 function utf8End(buf) {
   var r = buf && buf.length ? this.write(buf) : '';
-  if (this.lastNeed) return r + '\ufffd'.repeat(this.lastTotal - this.lastNeed);
+  if (this.lastNeed) return r + '\ufffd';
   return r;
 }
 
@@ -39500,7 +46206,86 @@ function simpleWrite(buf) {
 function simpleEnd(buf) {
   return buf && buf.length ? this.write(buf) : '';
 }
-},{"safe-buffer":208}],211:[function(require,module,exports){
+},{"safe-buffer":223}],226:[function(require,module,exports){
+(function (setImmediate,clearImmediate){
+var nextTick = require('process/browser.js').nextTick;
+var apply = Function.prototype.apply;
+var slice = Array.prototype.slice;
+var immediateIds = {};
+var nextImmediateId = 0;
+
+// DOM APIs, for completeness
+
+exports.setTimeout = function() {
+  return new Timeout(apply.call(setTimeout, window, arguments), clearTimeout);
+};
+exports.setInterval = function() {
+  return new Timeout(apply.call(setInterval, window, arguments), clearInterval);
+};
+exports.clearTimeout =
+exports.clearInterval = function(timeout) { timeout.close(); };
+
+function Timeout(id, clearFn) {
+  this._id = id;
+  this._clearFn = clearFn;
+}
+Timeout.prototype.unref = Timeout.prototype.ref = function() {};
+Timeout.prototype.close = function() {
+  this._clearFn.call(window, this._id);
+};
+
+// Does not start the time, just sets up the members needed.
+exports.enroll = function(item, msecs) {
+  clearTimeout(item._idleTimeoutId);
+  item._idleTimeout = msecs;
+};
+
+exports.unenroll = function(item) {
+  clearTimeout(item._idleTimeoutId);
+  item._idleTimeout = -1;
+};
+
+exports._unrefActive = exports.active = function(item) {
+  clearTimeout(item._idleTimeoutId);
+
+  var msecs = item._idleTimeout;
+  if (msecs >= 0) {
+    item._idleTimeoutId = setTimeout(function onTimeout() {
+      if (item._onTimeout)
+        item._onTimeout();
+    }, msecs);
+  }
+};
+
+// That's not how node.js implements it but the exposed api is the same.
+exports.setImmediate = typeof setImmediate === "function" ? setImmediate : function(fn) {
+  var id = nextImmediateId++;
+  var args = arguments.length < 2 ? false : slice.call(arguments, 1);
+
+  immediateIds[id] = true;
+
+  nextTick(function onNextTick() {
+    if (immediateIds[id]) {
+      // fn.call() is faster so we optimize for the common use-case
+      // @see http://jsperf.com/call-apply-segu
+      if (args) {
+        fn.apply(null, args);
+      } else {
+        fn.call(null);
+      }
+      // Prevent ids from leaking
+      exports.clearImmediate(id);
+    }
+  });
+
+  return id;
+};
+
+exports.clearImmediate = typeof clearImmediate === "function" ? clearImmediate : function(id) {
+  delete immediateIds[id];
+};
+}).call(this,require("timers").setImmediate,require("timers").clearImmediate)
+},{"process/browser.js":209,"timers":226}],227:[function(require,module,exports){
 (function (global){
 
 /**
@@ -39571,17 +46356,18 @@ function config (name) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],212:[function(require,module,exports){
+},{}],228:[function(require,module,exports){
 module.exports={
   "name": "@jscad/web",
-  "version": "1.6.2",
+  "version": "1.10.0",
   "description": "Web UI for OpenJsCAD",
   "repository": "https://github.com/jscad/OpenJSCAD.org",
   "scripts": {
     "build-web": "browserify src/ui/index.js -o dist/index.js -t [babelify browserify minifyify]",
     "build-min": "browserify src/ui/min.js -o dist/min.js -t [babelify browserify minifyify]",
     "build-opt": "browserify src/ui/opt.js -o dist/opt.js -t [babelify browserify minifyify]",
-    "build-all": "npm run build-web && npm run build-min && npm run build-opt",
+    "build-umd": "browserify --standalone openjscad src/ui/umd.js -o dist/openjscad.umd.js -t [babelify browserify minifyify]",
+    "build-all": "npm run build-web && npm run build-min && npm run build-opt && npm run build-umd",
     "start-dev": "budo src/ui/index.js:dist/index.js --port=8080 --live -- -b -t babelify",
     "preversion": "npm test",
     "version": "npm run build-all && git add -A ",
@@ -39606,13 +46392,15 @@ module.exports={
     }
   ],
   "license": "MIT",
+  "main": "dist/openjscad.umd.js",
+  "module": "dist/openjscad.umd.js",
   "dependencies": {
-    "@jscad/core": "^0.0.2",
-    "@jscad/csg": "0.5.2",
-    "@jscad/examples": "^1.6.2",
-    "@jscad/io": "0.3.7",
-    "@jscad/openscad-openjscad-translator": "0.0.10",
-    "astring": "^1.0.2",
+    "@jscad/core": "^0.4.0",
+    "@jscad/csg": "0.7.0",
+    "@jscad/examples": "^1.7.2",
+    "@jscad/io": "0.4.7",
+    "@jscad/openscad-openjscad-translator": "0.0.11",
+    "astring": "^1.3.1",
     "brace": "0.10.0",
     "esprima": "^3.1.3",
     "estraverse": "^4.2.0",
@@ -39644,7 +46432,7 @@ module.exports={
   }
 }
 
-},{}],213:[function(require,module,exports){
+},{}],229:[function(require,module,exports){
 'use strict';
 
 var generateOutputFileBlobUrl = require('../io/generateOutputFileBlobUrl');
@@ -39662,7 +46450,7 @@ module.exports = {
   generateOutputFile: generateOutputFile
 };
 
-},{"../io/generateOutputFileBlobUrl":214,"../io/generateOutputFileFileSystem":215}],214:[function(require,module,exports){
+},{"../io/generateOutputFileBlobUrl":230,"../io/generateOutputFileFileSystem":231}],230:[function(require,module,exports){
 'use strict';
 
 var _require = require('./utils'),
@@ -39690,7 +46478,7 @@ module.exports = function generateOutputFileBlobUrl(extension, blob, callback) {
   }
 };
 
-},{"./utils":216}],215:[function(require,module,exports){
+},{"./utils":232}],231:[function(require,module,exports){
 'use strict';
 
 var FileSystemApiErrorHandler = require('./utils');
@@ -39729,7 +46517,7 @@ module.exports = function generateOutputFileFileSystem(extension, blob, callback
   });
 };
 
-},{"./utils":216}],216:[function(require,module,exports){
+},{"./utils":232}],232:[function(require,module,exports){
 'use strict';
 
 function isSafari() {
@@ -39777,7 +46565,7 @@ module.exports = {
   FileSystemApiErrorHandler: FileSystemApiErrorHandler
 };
 
-},{}],217:[function(require,module,exports){
+},{}],233:[function(require,module,exports){
 'use strict';
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
@@ -39808,12 +46596,12 @@ module.exports = {
   status: status
 };
 
-},{}],218:[function(require,module,exports){
+},{}],234:[function(require,module,exports){
 'use strict';
 
 var log = require('./log');
 var getParameterDefinitions = require('@jscad/core/parameters/getParameterDefinitions');
-var getParameterValues = require('@jscad/core/parameters/getParameterValues');
+var getParameterValues = require('@jscad/core/parameters/getParameterValuesFromUIControls');
 
 var _require = require('@jscad/core/code-evaluation/rebuildSolids'),
     _rebuildSolids = _require.rebuildSolids,
@@ -40602,7 +47390,7 @@ Processor.prototype = {
 
 module.exports = Processor;
 
-},{"../io/generateOutputFile":213,"../io/utils":216,"../ui/viewer/jscad-viewer":223,"./log":217,"@jscad/core/code-evaluation/rebuildSolids":1,"@jscad/core/io/convertToBlob":6,"@jscad/core/io/formats":7,"@jscad/core/io/prepareOutput":8,"@jscad/core/parameters/getParameterDefinitions":102,"@jscad/core/parameters/getParameterValues":103,"@jscad/core/utils/mergeSolids":105}],219:[function(require,module,exports){
+},{"../io/generateOutputFile":229,"../io/utils":232,"../ui/viewer/jscad-viewer":239,"./log":233,"@jscad/core/code-evaluation/rebuildSolids":1,"@jscad/core/io/convertToBlob":6,"@jscad/core/io/formats":7,"@jscad/core/io/prepareOutput":8,"@jscad/core/parameters/getParameterDefinitions":118,"@jscad/core/parameters/getParameterValuesFromUIControls":119,"@jscad/core/utils/mergeSolids":121}],235:[function(require,module,exports){
 'use strict';
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
@@ -40647,7 +47435,7 @@ function AlertUserOfUncaughtExceptions() {
 
 module.exports = AlertUserOfUncaughtExceptions;
 
-},{}],220:[function(require,module,exports){
+},{}],236:[function(require,module,exports){
 'use strict';
 
 // == OpenJSCAD.org, Copyright (c) 2017, Licensed under MIT License
@@ -40693,7 +47481,7 @@ document.addEventListener('DOMContentLoaded', function (event) {
   init();
 });
 
-},{"../../package.json":212,"../jscad/processor":218,"./errorDispatcher":219}],221:[function(require,module,exports){
+},{"../../package.json":228,"../jscad/processor":234,"./errorDispatcher":235}],237:[function(require,module,exports){
 'use strict';
 
 /**
@@ -40753,7 +47541,7 @@ module.exports = {
   parseColor: parseColor
 };
 
-},{}],222:[function(require,module,exports){
+},{}],238:[function(require,module,exports){
 'use strict';
 
 var _require = require('most-gestures'),
@@ -40895,8 +47683,8 @@ LightGLEngine.prototype = {
     topArrow.classList.add('arrow-top');
 
     var bottomArrow = document.createElement('div');
-    topArrow.classList.add('arrow');
-    topArrow.classList.add('arrow-bottom');
+    bottomArrow.classList.add('arrow');
+    bottomArrow.classList.add('arrow-bottom');
 
     shiftControl.appendChild(leftArrow);
     shiftControl.appendChild(rightArrow);
@@ -41239,7 +48027,7 @@ LightGLEngine.prototype = {
 
 module.exports = LightGLEngine;
 
-},{"./jscad-viewer-helpers":221,"./lightgl":224,"most-gestures":119}],223:[function(require,module,exports){
+},{"./jscad-viewer-helpers":237,"./lightgl":240,"most-gestures":135}],239:[function(require,module,exports){
 'use strict';
 
 var LightGLEngine = require('./jscad-viewer-lightgl');
@@ -41456,7 +48244,7 @@ Viewer.prototype = {
 
 module.exports = Viewer;
 
-},{"./jscad-viewer-helpers":221,"./jscad-viewer-lightgl":222}],224:[function(require,module,exports){
+},{"./jscad-viewer-helpers":237,"./jscad-viewer-lightgl":238}],240:[function(require,module,exports){
 'use strict';
 
 /*
@@ -43684,4 +50472,4 @@ var GL = function () {
 
 module.exports = GL;
 
-},{}]},{},[220]);
+},{}]},{},[236]);
