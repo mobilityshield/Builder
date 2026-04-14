@@ -1,0 +1,430 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, Arial, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+#asmApp {
+  height: 100vh;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f5f6f8;
+  color: #10131a;
+}
+
+#asmToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid #d7dbe2;
+  background: #fff;
+}
+
+#asmToolbarControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+#asmToolbar button,
+.asm-panel-btn {
+  padding: 7px 12px;
+  border: 1px solid #c7cedb;
+  background: #ffffff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#asmToolbar button:hover,
+.asm-panel-btn:hover {
+  background: #f2f5fb;
+}
+
+#asmAddBtn {
+  background: #5f8060 !important;
+  border-color: #4f6e50 !important;
+  color: #fff !important;
+}
+
+#asmDuplicateBtn {
+  background: #607a96 !important;
+  border-color: #4f6884 !important;
+  color: #fff !important;
+}
+
+#asmRemoveBtn,
+#asmClearBtn {
+  background: #8e5d5d !important;
+  border-color: #7a4f4f !important;
+  color: #fff !important;
+}
+
+#asmAddBtn:hover {
+  background: #567557 !important;
+}
+
+#asmDuplicateBtn:hover {
+  background: #576f8a !important;
+}
+
+#asmRemoveBtn:hover,
+#asmClearBtn:hover {
+  background: #805353 !important;
+}
+
+.asm-toolbar-logo {
+  margin-left: auto;
+  width: 250px;
+  height: 35px;
+  object-fit: contain;
+  max-width: 100%;
+}
+
+#asmLayout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(300px, 380px);
+  gap: 12px;
+  padding: 12px;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+#asmLayout.is-inspector-hidden {
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+}
+
+#asmLayout.is-panels-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+#asmCatalog,
+#asmInspector,
+#asmViewerPanel {
+  background: #fff;
+  border: 1px solid #d7dbe2;
+  border-radius: 8px;
+  padding: 10px;
+  min-height: 0;
+}
+
+#asmCatalog,
+#asmInspector {
+  overflow: auto;
+}
+
+#asmLayout.is-panels-hidden #asmCatalog {
+  display: none;
+}
+
+#asmLayout.is-inspector-hidden #asmInspector,
+#asmLayout.is-panels-hidden #asmInspector {
+  display: none;
+}
+
+#asmCatalogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#asmCatalogHeader h2 {
+  margin: 0;
+}
+
+#asmCatalogToggle,
+#asmHidePanelsBtn,
+#asmDeselectBtn,
+#asmInspectorCloseBtn {
+  border: 1px solid #c7cedb;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+#asmCatalog.is-catalog-collapsed #asmCatalogList {
+  display: none;
+}
+
+#asmViewerPanel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#asmViewer {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  border: 1px solid #d8dde8;
+  border-radius: 6px;
+  background: #f0f3f8;
+}
+
+#asmCatalogList,
+#asmPieceList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#asmCatalogList li,
+#asmPieceList li {
+  border: 1px solid #d7dbe2;
+  border-radius: 6px;
+  padding: 7px;
+  cursor: pointer;
+  background: #fff;
+}
+
+#asmCatalogList li:hover,
+#asmPieceList li:hover {
+  border-color: #8ca4d5;
+}
+
+#asmCatalogList li.is-selected,
+#asmPieceList li.is-selected {
+  border-color: #3a67c7;
+  background: #eaf0ff;
+}
+
+#asmCatalogList li.asm-divider {
+  border: 0;
+  border-top: 1px solid #d7dbe2;
+  border-radius: 0;
+  height: 0;
+  padding: 0;
+  margin: 4px 2px;
+  cursor: default;
+  background: transparent;
+}
+
+.asm-catalog-item-title {
+  display: inline;
+}
+
+.asm-new-badge,
+.asm-type-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.asm-new-badge {
+  background: #ffd54f;
+  color: #2f2700;
+  font-weight: 700;
+}
+
+.asm-type-badge {
+  background: #e8edf7;
+  color: #3f4c66;
+}
+
+#asmPieceList li.is-loading::after {
+  content: " • loading";
+  color: #745700;
+  font-size: 12px;
+}
+
+#asmPieceList li.is-error::after {
+  content: " • error";
+  color: #b11a1a;
+  font-size: 12px;
+}
+
+#asmAssembly {
+  margin-top: 12px;
+}
+
+#asmAssembly h2 {
+  margin: 0 0 8px 0;
+}
+
+#asmAssemblyHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+#asmAssemblyHeader h2 {
+  margin: 0;
+}
+
+#asmInspectorHeaderRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#asmInspectorHeader {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+#asmPartIdInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 6px;
+}
+
+#asmTransformForm {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.asm-transform-group {
+  border: 1px solid #dbe1ee;
+  border-radius: 8px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.asm-transform-group legend {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3f4c66;
+}
+
+.asm-transform-group label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.asm-transform-group input {
+  padding: 4px 6px;
+}
+
+.asm-axis {
+  font-weight: 700;
+}
+
+.asm-axis-x {
+  color: #d91f1f;
+}
+
+.asm-axis-y {
+  color: #108f35;
+}
+
+.asm-axis-z {
+  color: #2359d4;
+}
+
+.asm-group-block {
+  border: 1px solid #dbe1ee;
+  border-radius: 8px;
+  padding: 8px;
+  margin: 10px 0 0 0;
+}
+
+.asm-group-block legend {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3f4c66;
+}
+
+#asmParams {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.asm-param,
+.asm-group {
+  margin-bottom: 10px;
+}
+
+.asm-param label,
+.asm-group-title {
+  font-size: 13px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.asm-param input,
+.asm-param select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+}
+
+.asm-param-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.asm-param-checkbox input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.asm-param-checkbox label {
+  margin: 0;
+  display: inline;
+}
+
+#asmPieceStatus,
+#asmParams {
+  min-height: 20px;
+  font-size: 13px;
+}
+
+#asmPieceStatus {
+  margin-top: 4px;
+}
+
+#asmPieceStatus.is-error {
+  color: #b11a1a;
+}
+
+#asmPieceStatus.is-info {
+  color: #1c4a9d;
+}
+
+@media (max-width: 1280px) {
+  #asmLayout {
+    grid-template-columns: 260px minmax(0, 1fr) 300px;
+  }
+
+  #asmLayout.is-inspector-hidden {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+}

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSCAD Assembler</title>
+  <link rel="shortcut icon" href="imgs/favicon.png" type="image/x-png">
+  <link rel="stylesheet" href="openjscad.css" type="text/css">
+  <link rel="stylesheet" href="assembler.css" type="text/css">
+</head>
+<body>
+  <div id="asmApp">
+    <div id="asmToolbar">
+      <div id="asmToolbarControls">
+        <button id="asmHidePanelsBtn" type="button">Hide Panels</button>
+        <button id="asmAddBtn" type="button">Add</button>
+        <button id="asmDuplicateBtn" type="button">Duplicate</button>
+        <button id="asmRemoveBtn" type="button">Remove</button>
+        <button id="asmExportBtn" type="button">Export JSON</button>
+        <button id="asmImportBtn" type="button">Import JSON</button>
+        <button id="asmClearBtn" type="button">Clear Assembly</button>
+      </div>
+      <img class="asm-toolbar-logo" src="imgs/title.png" alt="Mobility Shield">
+    </div>
+
+    <div id="asmLayout">
+      <aside id="asmCatalog">
+        <div id="asmCatalogHeader">
+          <h2>Catalog</h2>
+          <button id="asmCatalogToggle" type="button" aria-expanded="true">Collapse</button>
+        </div>
+        <ul id="asmCatalogList"></ul>
+        <section id="asmAssembly">
+          <div id="asmAssemblyHeader">
+            <h2>Assembly</h2>
+            <button id="asmDeselectBtn" type="button">Deselect Part</button>
+          </div>
+          <ul id="asmPieceList"></ul>
+        </section>
+      </aside>
+
+      <section id="asmViewerPanel">
+        <div id="asmViewer"></div>
+      </section>
+
+      <aside id="asmInspector">
+        <div id="asmInspectorHeaderRow">
+          <div id="asmInspectorHeader">No selection</div>
+          <button id="asmInspectorCloseBtn" type="button">X</button>
+        </div>
+        <fieldset id="asmPartIdWrap" class="asm-group-block">
+          <legend>Part Name</legend>
+          <input id="asmPartIdInput" type="text" autocomplete="off">
+        </fieldset>
+        <form id="asmTransformForm" autocomplete="off">
+          <fieldset class="asm-transform-group">
+            <legend>Position</legend>
+            <label><span class="asm-axis asm-axis-x">X</span> <input id="asmPosX" type="number" step="any"></label>
+            <label><span class="asm-axis asm-axis-y">Y</span> <input id="asmPosY" type="number" step="any"></label>
+            <label><span class="asm-axis asm-axis-z">Z</span> <input id="asmPosZ" type="number" step="any"></label>
+          </fieldset>
+          <fieldset class="asm-transform-group">
+            <legend>Rotation (deg)</legend>
+            <label><span class="asm-axis asm-axis-x">X</span> <input id="asmRotX" type="number" step="any"></label>
+            <label><span class="asm-axis asm-axis-y">Y</span> <input id="asmRotY" type="number" step="any"></label>
+            <label><span class="asm-axis asm-axis-z">Z</span> <input id="asmRotZ" type="number" step="any"></label>
+          </fieldset>
+        </form>
+        <fieldset id="asmParamsWrap" class="asm-group-block">
+          <legend>Part parameters</legend>
+          <div id="asmParams"></div>
+        </fieldset>
+        <fieldset id="asmPieceStatusWrap" class="asm-group-block">
+          <legend>Part status</legend>
+          <div id="asmPieceStatus"></div>
+        </fieldset>
+      </aside>
+    </div>
+
+    <input id="asmImportInput" type="file" accept=".json,application/json" hidden>
+  </div>
+
+  <script src="dist/assembler.js"></script>
+</body>
+</html>
