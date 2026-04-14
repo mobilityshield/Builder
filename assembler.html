@@ -12,15 +12,13 @@
   <div id="asmApp">
     <div id="asmToolbar">
       <div id="asmToolbarControls">
-        <button id="asmCatalogToggle" type="button" aria-expanded="true">Close Catalog</button>
         <button id="asmHidePanelsBtn" type="button">Hide Panels</button>
-        <button id="asmShowLeftPanelBtn" type="button" hidden>Show Left Panel</button>
         <button id="asmAddBtn" type="button">Add</button>
         <button id="asmDuplicateBtn" type="button">Duplicate</button>
         <button id="asmRemoveBtn" type="button">Remove</button>
         <button id="asmExportBtn" type="button">Export JSON</button>
         <button id="asmImportBtn" type="button">Import JSON</button>
-        <button id="asmClearBtn" type="button">Clear</button>
+        <button id="asmClearBtn" type="button">Clear Assembly</button>
       </div>
       <img class="asm-toolbar-logo" src="imgs/title.png" alt="Mobility Shield">
     </div>
@@ -29,6 +27,7 @@
       <aside id="asmCatalog">
         <div id="asmCatalogHeader">
           <h2>Catalog</h2>
+          <button id="asmCatalogToggle" type="button" aria-expanded="true">Collapse</button>
         </div>
         <ul id="asmCatalogList"></ul>
         <section id="asmAssembly">

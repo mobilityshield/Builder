@@ -13,7 +13,7 @@
   var state = {
     version: 1,
     catalog: FALLBACK_CATALOG.slice(),
-    catalogHidden: false,
+    catalogCollapsed: false,
     panelsHidden: false,
     selectedCatalogIndex: 0,
     selectedPieceId: null,
@@ -105,7 +105,6 @@
     els.importBtn = document.getElementById('asmImportBtn');
     els.clearBtn = document.getElementById('asmClearBtn');
     els.hidePanelsBtn = document.getElementById('asmHidePanelsBtn');
-    els.showLeftPanelBtn = document.getElementById('asmShowLeftPanelBtn');
     els.posX = document.getElementById('asmPosX');
     els.posY = document.getElementById('asmPosY');
     els.posZ = document.getElementById('asmPosZ');
@@ -126,7 +125,6 @@
     els.deselectBtn.addEventListener('click', deselectSelectedPiece);
     els.inspectorCloseBtn.addEventListener('click', deselectSelectedPiece);
     els.hidePanelsBtn.addEventListener('click', hidePanels);
-    els.showLeftPanelBtn.addEventListener('click', showLeftPanel);
     els.partIdInput.addEventListener('change', commitPartIdChange);
     els.partIdInput.addEventListener('blur', commitPartIdChange);
     els.partIdInput.addEventListener('keydown', function (event) {
@@ -308,28 +306,12 @@
   }
 
   function toggleCatalogList() {
-    if (state.panelsHidden) {
-      state.panelsHidden = false;
-      state.catalogHidden = false;
-    } else {
-      state.catalogHidden = !state.catalogHidden;
-    }
+    state.catalogCollapsed = !state.catalogCollapsed;
     renderLayoutState();
-    scheduleViewerResize();
   }
 
   function hidePanels() {
-    state.panelsHidden = true;
-    state.catalogHidden = true;
-    state.selectedPieceId = null;
-    renderAssemblyList();
-    renderInspector();
-    scheduleRender();
-  }
-
-  function showLeftPanel() {
-    state.panelsHidden = false;
-    state.catalogHidden = false;
+    state.panelsHidden = !state.panelsHidden;
     state.selectedPieceId = null;
     renderAssemblyList();
     renderInspector();
@@ -346,20 +328,20 @@
 
   function renderLayoutState() {
     var inspectorVisible = !state.panelsHidden && !!state.selectedPieceId;
-    var catalogVisible = !state.panelsHidden && !state.catalogHidden;
+    var catalogVisible = !state.panelsHidden;
 
-    els.layout.classList.toggle('is-catalog-hidden', !catalogVisible);
+    els.layout.classList.toggle('is-panels-hidden', !catalogVisible);
     els.layout.classList.toggle('is-inspector-hidden', !inspectorVisible);
-    els.layout.classList.toggle('is-viewer-only', !catalogVisible && !inspectorVisible);
+    els.catalogRoot.classList.toggle('is-catalog-collapsed', !!state.catalogCollapsed);
 
-    els.catalogToggle.textContent = catalogVisible ? 'Close Catalog' : 'Open Catalog';
-    els.catalogToggle.setAttribute('aria-expanded', catalogVisible ? 'true' : 'false');
+    els.catalogToggle.textContent = state.catalogCollapsed ? 'Expand' : 'Collapse';
+    els.catalogToggle.setAttribute('aria-expanded', state.catalogCollapsed ? 'false' : 'true');
 
     var fullHidden = !!state.panelsHidden;
-    els.showLeftPanelBtn.hidden = !fullHidden;
     els.addBtn.hidden = fullHidden;
     els.dupBtn.hidden = fullHidden;
     els.removeBtn.hidden = fullHidden;
+    els.hidePanelsBtn.textContent = fullHidden ? 'Show Panel' : 'Hide Panel';
     els.deselectBtn.disabled = !state.selectedPieceId;
     els.inspectorCloseBtn.disabled = !state.selectedPieceId;
 
@@ -993,9 +975,6 @@
   function createParamControl(piece, definition, value, defaultValue, index) {
     var wrap = document.createElement('div');
     wrap.className = 'asm-param';
-    var label = document.createElement('label');
-    renderCaption(label, definition.caption, definition.name);
-    wrap.appendChild(label);
 
     var type = String(definition.type || 'text').toLowerCase();
     var input;
@@ -1035,11 +1014,20 @@
     } else {
       input = document.createElement('input');
       if (type === 'checkbox') {
+        wrap.classList.add('asm-param-checkbox');
         input.type = 'checkbox';
         input.checked = !!value;
+        input.id = 'asm_param_' + piece.id + '_' + index;
         input.addEventListener('change', function () {
           updateParam(piece, definition, input.checked, defaultValue);
         });
+        wrap.appendChild(input);
+
+        var checkboxLabel = document.createElement('label');
+        checkboxLabel.setAttribute('for', input.id);
+        renderCaption(checkboxLabel, definition.caption, definition.name);
+        wrap.appendChild(checkboxLabel);
+        return wrap;
       } else if (type === 'color') {
         input.type = 'color';
         input.value = normalizeColor(value);
@@ -1077,6 +1065,9 @@
       }
     }
 
+    var label = document.createElement('label');
+    renderCaption(label, definition.caption, definition.name);
+    wrap.appendChild(label);
     wrap.appendChild(input);
     return wrap;
   }

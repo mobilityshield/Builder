@@ -49,6 +49,38 @@ body {
   background: #f2f5fb;
 }
 
+#asmAddBtn {
+  background: #d7e4d5;
+  border-color: #a7bca3;
+  color: #284626;
+}
+
+#asmDuplicateBtn {
+  background: #d8e1ee;
+  border-color: #aab8cd;
+  color: #24405c;
+}
+
+#asmRemoveBtn,
+#asmClearBtn {
+  background: #ecd9d9;
+  border-color: #cfaaaa;
+  color: #6b2f2f;
+}
+
+#asmAddBtn:hover {
+  background: #c9dbc6;
+}
+
+#asmDuplicateBtn:hover {
+  background: #ccd8e8;
+}
+
+#asmRemoveBtn:hover,
+#asmClearBtn:hover {
+  background: #e4cccc;
+}
+
 .asm-toolbar-logo {
   margin-left: auto;
   width: 250px;
@@ -68,15 +100,11 @@ body {
   overflow: hidden;
 }
 
-#asmLayout.is-catalog-hidden {
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
-}
-
 #asmLayout.is-inspector-hidden {
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
 }
 
-#asmLayout.is-catalog-hidden.is-inspector-hidden {
+#asmLayout.is-panels-hidden {
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -95,11 +123,12 @@ body {
   overflow: auto;
 }
 
-#asmLayout.is-catalog-hidden #asmCatalog {
+#asmLayout.is-panels-hidden #asmCatalog {
   display: none;
 }
 
-#asmLayout.is-inspector-hidden #asmInspector {
+#asmLayout.is-inspector-hidden #asmInspector,
+#asmLayout.is-panels-hidden #asmInspector {
   display: none;
 }
 
@@ -117,7 +146,6 @@ body {
 
 #asmCatalogToggle,
 #asmHidePanelsBtn,
-#asmShowLeftPanelBtn,
 #asmDeselectBtn,
 #asmInspectorCloseBtn {
   border: 1px solid #c7cedb;
@@ -126,6 +154,10 @@ body {
   cursor: pointer;
   font-size: 12px;
   padding: 4px 8px;
+}
+
+#asmCatalog.is-catalog-collapsed #asmCatalogList {
+  display: none;
 }
 
 #asmViewerPanel {
@@ -353,6 +385,22 @@ body {
   padding: 4px 6px;
 }
 
+.asm-param-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.asm-param-checkbox input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.asm-param-checkbox label {
+  margin: 0;
+  display: inline;
+}
+
 #asmPieceStatus,
 #asmParams {
   min-height: 20px;
@@ -376,7 +424,7 @@ body {
     grid-template-columns: 260px minmax(0, 1fr) 300px;
   }
 
-  #asmLayout.is-catalog-hidden {
-    grid-template-columns: minmax(0, 1fr) 300px;
+  #asmLayout.is-inspector-hidden {
+    grid-template-columns: 260px minmax(0, 1fr);
   }
 }
