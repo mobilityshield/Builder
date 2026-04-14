@@ -50,35 +50,35 @@ body {
 }
 
 #asmAddBtn {
-  background: #d7e4d5;
-  border-color: #a7bca3;
-  color: #284626;
+  background: #5f8060;
+  border-color: #4f6e50;
+  color: #fff;
 }
 
 #asmDuplicateBtn {
-  background: #d8e1ee;
-  border-color: #aab8cd;
-  color: #24405c;
+  background: #607a96;
+  border-color: #4f6884;
+  color: #fff;
 }
 
 #asmRemoveBtn,
 #asmClearBtn {
-  background: #ecd9d9;
-  border-color: #cfaaaa;
-  color: #6b2f2f;
+  background: #8e5d5d;
+  border-color: #7a4f4f;
+  color: #fff;
 }
 
 #asmAddBtn:hover {
-  background: #c9dbc6;
+  background: #567557;
 }
 
 #asmDuplicateBtn:hover {
-  background: #ccd8e8;
+  background: #576f8a;
 }
 
 #asmRemoveBtn:hover,
 #asmClearBtn:hover {
-  background: #e4cccc;
+  background: #805353;
 }
 
 .asm-toolbar-logo {

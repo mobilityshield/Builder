@@ -93,6 +93,7 @@
     els.inspectorHeader = document.getElementById('asmInspectorHeader');
     els.inspectorCloseBtn = document.getElementById('asmInspectorCloseBtn');
     els.partIdInput = document.getElementById('asmPartIdInput');
+    els.paramsWrap = document.getElementById('asmParamsWrap');
     els.params = document.getElementById('asmParams');
     els.pieceStatus = document.getElementById('asmPieceStatus');
     els.viewerHost = document.getElementById('asmViewer');
@@ -231,6 +232,7 @@
     return raw.map(function (entry) {
       if (!entry || typeof entry !== 'object' || typeof entry.file !== 'string') return null;
       var file = entry.file.indexOf('examples/') === 0 ? entry.file : 'examples/' + entry.file;
+      file = normalizeModelFilePath(file);
       return {
         file: file,
         title: entry.title || entry.file,
@@ -415,7 +417,8 @@
       els.partIdInput.disabled = true;
       setTransformEnabled(false);
       writeTransformInputs({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
-      els.params.innerHTML = '<p>Select a piece to edit parameters.</p>';
+      els.params.innerHTML = '';
+      els.paramsWrap.hidden = true;
       setPieceStatus('', 'info');
       renderLayoutState();
       return;
@@ -426,7 +429,8 @@
     els.partIdInput.value = piece.id;
     setTransformEnabled(true);
     writeTransformInputs(piece.position, piece.rotation);
-    buildParameterUI(piece);
+    var renderedParamCount = buildParameterUI(piece);
+    els.paramsWrap.hidden = renderedParamCount === 0;
     if (piece.error) {
       setPieceStatus(errorMessage(piece.error), 'error');
     } else if (piece.loading) {
@@ -466,7 +470,7 @@
   function makePieceFromCatalog(item) {
     return {
       id: createPieceId(),
-      file: item.file,
+      file: normalizeModelFilePath(item.file),
       title: item.title,
       paramsDiff: {},
       position: { x: 0, y: 0, z: 0 },
@@ -629,13 +633,15 @@
   }
 
   async function ensureSource(piece) {
-    if (state.sourceCache[piece.file]) return state.sourceCache[piece.file];
-    if (state.sourceCachePromises[piece.file]) return state.sourceCachePromises[piece.file];
+    piece.file = normalizeModelFilePath(piece.file);
+    var file = piece.file;
+    if (state.sourceCache[file]) return state.sourceCache[file];
+    if (state.sourceCachePromises[file]) return state.sourceCachePromises[file];
 
-    state.sourceCachePromises[piece.file] = (async function () {
-      var fullUrl = new URL(piece.file, location.href).href;
-      var response = await fetch(piece.file);
-      if (!response.ok) throw new Error('Failed to load ' + piece.file + ' (' + response.status + ')');
+    state.sourceCachePromises[file] = (async function () {
+      var fullUrl = new URL(file, location.href).href;
+      var response = await fetch(file);
+      if (!response.ok) throw new Error('Failed to load ' + file + ' (' + response.status + ')');
       var source = await response.text();
 
       var paramDefinitions = [];
@@ -654,14 +660,14 @@
         paramDefinitions: paramDefinitions,
         defaultParams: defaultParams
       };
-      state.sourceCache[piece.file] = cache;
+      state.sourceCache[file] = cache;
       return cache;
     })();
 
     try {
-      return await state.sourceCachePromises[piece.file];
+      return await state.sourceCachePromises[file];
     } finally {
-      delete state.sourceCachePromises[piece.file];
+      delete state.sourceCachePromises[file];
     }
   }
 
@@ -938,13 +944,14 @@
   function buildParameterUI(piece) {
     var cache = state.sourceCache[piece.file];
     if (!cache || !cache.paramDefinitions) {
-      els.params.innerHTML = '<p>Parameters unavailable until source loads.</p>';
-      return;
+      els.params.innerHTML = '';
+      return 0;
     }
 
     var defaults = cache.defaultParams;
     var effective = getEffectiveParams(piece, defaults);
     els.params.innerHTML = '';
+    var renderedCount = 0;
 
     cache.paramDefinitions.forEach(function (definition, idx) {
       if (!definition) return;
@@ -961,7 +968,9 @@
       }
       if (!definition.name) return;
       els.params.appendChild(createParamControl(piece, definition, effective[definition.name], defaults[definition.name], idx));
+      renderedCount += 1;
     });
+    return renderedCount;
   }
 
   function renderCaption(node, caption, fallbackText) {
@@ -1159,6 +1168,7 @@
     var newPieces = payload.pieces.map(function (raw) {
       if (!raw || typeof raw !== 'object') throw new Error('Each piece must be an object.');
       if (!raw.file || typeof raw.file !== 'string') throw new Error('Each piece must include a file path.');
+      var normalizedFile = normalizeModelFilePath(raw.file);
 
       var baseId = sanitizePieceId(raw.id, 'piece');
       var uniqueId = baseId;
@@ -1171,8 +1181,8 @@
 
       return {
         id: uniqueId,
-        file: raw.file,
-        title: inferTitle(raw.file),
+        file: normalizedFile,
+        title: inferTitle(normalizedFile),
         paramsDiff: {},
         position: normalizeVector(raw.position),
         rotation: normalizeVector(raw.rotation),
@@ -1201,8 +1211,9 @@
   }
 
   function inferTitle(file) {
+    file = normalizeModelFilePath(file);
     for (var i = 0; i < state.catalog.length; i++) {
-      if (state.catalog[i].file === file) return state.catalog[i].title;
+      if (normalizeModelFilePath(state.catalog[i].file) === file) return state.catalog[i].title;
     }
     var parts = String(file).split('/');
     return parts[parts.length - 1] || file;
@@ -1226,6 +1237,11 @@
     if (value < min) return min;
     if (value > max) return max;
     return value;
+  }
+
+  function normalizeModelFilePath(file) {
+    var text = String(file || '');
+    return /\.stl$/i.test(text) ? text.replace(/\.stl$/i, '.jscad') : text;
   }
 
   function setGlobalStatus(message, kind) {
