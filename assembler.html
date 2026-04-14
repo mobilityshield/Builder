@@ -11,12 +11,17 @@
 <body>
   <div id="asmApp">
     <div id="asmToolbar">
-      <button id="asmAddBtn" type="button">Add</button>
-      <button id="asmDuplicateBtn" type="button">Duplicate</button>
-      <button id="asmRemoveBtn" type="button">Remove</button>
-      <button id="asmExportBtn" type="button">Export JSON</button>
-      <button id="asmImportBtn" type="button">Import JSON</button>
-      <button id="asmClearBtn" type="button">Clear</button>
+      <div id="asmToolbarControls">
+        <button id="asmCatalogToggle" type="button" aria-expanded="true">Close Catalog</button>
+        <button id="asmHidePanelsBtn" type="button">Hide Panels</button>
+        <button id="asmShowLeftPanelBtn" type="button" hidden>Show Left Panel</button>
+        <button id="asmAddBtn" type="button">Add</button>
+        <button id="asmDuplicateBtn" type="button">Duplicate</button>
+        <button id="asmRemoveBtn" type="button">Remove</button>
+        <button id="asmExportBtn" type="button">Export JSON</button>
+        <button id="asmImportBtn" type="button">Import JSON</button>
+        <button id="asmClearBtn" type="button">Clear</button>
+      </div>
       <img class="asm-toolbar-logo" src="imgs/title.png" alt="Mobility Shield">
     </div>
 
@@ -24,11 +29,13 @@
       <aside id="asmCatalog">
         <div id="asmCatalogHeader">
           <h2>Catalog</h2>
-          <button id="asmCatalogToggle" type="button" aria-expanded="true">Collapse</button>
         </div>
         <ul id="asmCatalogList"></ul>
         <section id="asmAssembly">
-          <h2>Assembly</h2>
+          <div id="asmAssemblyHeader">
+            <h2>Assembly</h2>
+            <button id="asmDeselectBtn" type="button">Deselect Part</button>
+          </div>
           <ul id="asmPieceList"></ul>
         </section>
       </aside>
@@ -38,11 +45,14 @@
       </section>
 
       <aside id="asmInspector">
-        <div id="asmInspectorHeader">No selection</div>
-        <div id="asmPartIdWrap">
-          <label for="asmPartIdInput">Part ID</label>
-          <input id="asmPartIdInput" type="text" autocomplete="off">
+        <div id="asmInspectorHeaderRow">
+          <div id="asmInspectorHeader">No selection</div>
+          <button id="asmInspectorCloseBtn" type="button">X</button>
         </div>
+        <fieldset id="asmPartIdWrap" class="asm-group-block">
+          <legend>Part Name</legend>
+          <input id="asmPartIdInput" type="text" autocomplete="off">
+        </fieldset>
         <form id="asmTransformForm" autocomplete="off">
           <fieldset class="asm-transform-group">
             <legend>Position</legend>

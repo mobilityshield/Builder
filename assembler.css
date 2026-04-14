@@ -28,7 +28,15 @@ body {
   background: #fff;
 }
 
-#asmToolbar button {
+#asmToolbarControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+#asmToolbar button,
+.asm-panel-btn {
   padding: 7px 12px;
   border: 1px solid #c7cedb;
   background: #ffffff;
@@ -36,7 +44,8 @@ body {
   cursor: pointer;
 }
 
-#asmToolbar button:hover {
+#asmToolbar button:hover,
+.asm-panel-btn:hover {
   background: #f2f5fb;
 }
 
@@ -59,6 +68,18 @@ body {
   overflow: hidden;
 }
 
+#asmLayout.is-catalog-hidden {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+}
+
+#asmLayout.is-inspector-hidden {
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+}
+
+#asmLayout.is-catalog-hidden.is-inspector-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 #asmCatalog,
 #asmInspector,
 #asmViewerPanel {
@@ -74,6 +95,14 @@ body {
   overflow: auto;
 }
 
+#asmLayout.is-catalog-hidden #asmCatalog {
+  display: none;
+}
+
+#asmLayout.is-inspector-hidden #asmInspector {
+  display: none;
+}
+
 #asmCatalogHeader {
   display: flex;
   align-items: center;
@@ -86,17 +115,17 @@ body {
   margin: 0;
 }
 
-#asmCatalogToggle {
+#asmCatalogToggle,
+#asmHidePanelsBtn,
+#asmShowLeftPanelBtn,
+#asmDeselectBtn,
+#asmInspectorCloseBtn {
   border: 1px solid #c7cedb;
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
   font-size: 12px;
   padding: 4px 8px;
-}
-
-#asmCatalog.is-collapsed #asmCatalogList {
-  display: none;
 }
 
 #asmViewerPanel {
@@ -204,20 +233,29 @@ body {
   margin: 0 0 8px 0;
 }
 
-#asmInspectorHeader {
-  margin-bottom: 6px;
-  font-weight: 600;
-  word-break: break-word;
-}
-
-#asmPartIdWrap {
+#asmAssemblyHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
 }
 
-#asmPartIdWrap label {
-  display: block;
-  font-size: 12px;
-  margin-bottom: 4px;
+#asmAssemblyHeader h2 {
+  margin: 0;
+}
+
+#asmInspectorHeaderRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#asmInspectorHeader {
+  font-weight: 600;
+  word-break: break-word;
 }
 
 #asmPartIdInput {
@@ -336,5 +374,9 @@ body {
 @media (max-width: 1280px) {
   #asmLayout {
     grid-template-columns: 260px minmax(0, 1fr) 300px;
+  }
+
+  #asmLayout.is-catalog-hidden {
+    grid-template-columns: minmax(0, 1fr) 300px;
   }
 }

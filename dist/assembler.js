@@ -13,7 +13,8 @@
   var state = {
     version: 1,
     catalog: FALLBACK_CATALOG.slice(),
-    catalogCollapsed: false,
+    catalogHidden: false,
+    panelsHidden: false,
     selectedCatalogIndex: 0,
     selectedPieceId: null,
     nextPieceCounter: 1,
@@ -86,8 +87,11 @@
     els.catalogList = document.getElementById('asmCatalogList');
     els.catalogToggle = document.getElementById('asmCatalogToggle');
     els.catalogRoot = document.getElementById('asmCatalog');
+    els.layout = document.getElementById('asmLayout');
     els.pieceList = document.getElementById('asmPieceList');
+    els.deselectBtn = document.getElementById('asmDeselectBtn');
     els.inspectorHeader = document.getElementById('asmInspectorHeader');
+    els.inspectorCloseBtn = document.getElementById('asmInspectorCloseBtn');
     els.partIdInput = document.getElementById('asmPartIdInput');
     els.params = document.getElementById('asmParams');
     els.pieceStatus = document.getElementById('asmPieceStatus');
@@ -100,6 +104,8 @@
     els.exportBtn = document.getElementById('asmExportBtn');
     els.importBtn = document.getElementById('asmImportBtn');
     els.clearBtn = document.getElementById('asmClearBtn');
+    els.hidePanelsBtn = document.getElementById('asmHidePanelsBtn');
+    els.showLeftPanelBtn = document.getElementById('asmShowLeftPanelBtn');
     els.posX = document.getElementById('asmPosX');
     els.posY = document.getElementById('asmPosY');
     els.posZ = document.getElementById('asmPosZ');
@@ -117,6 +123,10 @@
     els.importBtn.addEventListener('click', function () { els.importInput.click(); });
     els.importInput.addEventListener('change', onImportChange);
     els.catalogToggle.addEventListener('click', toggleCatalogList);
+    els.deselectBtn.addEventListener('click', deselectSelectedPiece);
+    els.inspectorCloseBtn.addEventListener('click', deselectSelectedPiece);
+    els.hidePanelsBtn.addEventListener('click', hidePanels);
+    els.showLeftPanelBtn.addEventListener('click', showLeftPanel);
     els.partIdInput.addEventListener('change', commitPartIdChange);
     els.partIdInput.addEventListener('blur', commitPartIdChange);
     els.partIdInput.addEventListener('keydown', function (event) {
@@ -298,19 +308,66 @@
   }
 
   function toggleCatalogList() {
-    state.catalogCollapsed = !state.catalogCollapsed;
-    updateCatalogCollapseUI();
+    if (state.panelsHidden) {
+      state.panelsHidden = false;
+      state.catalogHidden = false;
+    } else {
+      state.catalogHidden = !state.catalogHidden;
+    }
+    renderLayoutState();
+    scheduleViewerResize();
   }
 
-  function updateCatalogCollapseUI() {
-    if (!els.catalogRoot || !els.catalogToggle) return;
-    els.catalogRoot.classList.toggle('is-collapsed', !!state.catalogCollapsed);
-    els.catalogToggle.setAttribute('aria-expanded', state.catalogCollapsed ? 'false' : 'true');
-    els.catalogToggle.textContent = state.catalogCollapsed ? 'Expand' : 'Collapse';
+  function hidePanels() {
+    state.panelsHidden = true;
+    state.catalogHidden = true;
+    state.selectedPieceId = null;
+    renderAssemblyList();
+    renderInspector();
+    scheduleRender();
+  }
+
+  function showLeftPanel() {
+    state.panelsHidden = false;
+    state.catalogHidden = false;
+    state.selectedPieceId = null;
+    renderAssemblyList();
+    renderInspector();
+    scheduleRender();
+  }
+
+  function deselectSelectedPiece() {
+    if (!state.selectedPieceId) return;
+    state.selectedPieceId = null;
+    renderAssemblyList();
+    renderInspector();
+    scheduleRender();
+  }
+
+  function renderLayoutState() {
+    var inspectorVisible = !state.panelsHidden && !!state.selectedPieceId;
+    var catalogVisible = !state.panelsHidden && !state.catalogHidden;
+
+    els.layout.classList.toggle('is-catalog-hidden', !catalogVisible);
+    els.layout.classList.toggle('is-inspector-hidden', !inspectorVisible);
+    els.layout.classList.toggle('is-viewer-only', !catalogVisible && !inspectorVisible);
+
+    els.catalogToggle.textContent = catalogVisible ? 'Close Catalog' : 'Open Catalog';
+    els.catalogToggle.setAttribute('aria-expanded', catalogVisible ? 'true' : 'false');
+
+    var fullHidden = !!state.panelsHidden;
+    els.showLeftPanelBtn.hidden = !fullHidden;
+    els.addBtn.hidden = fullHidden;
+    els.dupBtn.hidden = fullHidden;
+    els.removeBtn.hidden = fullHidden;
+    els.deselectBtn.disabled = !state.selectedPieceId;
+    els.inspectorCloseBtn.disabled = !state.selectedPieceId;
+
+    scheduleViewerResize();
   }
 
   function renderCatalog() {
-    updateCatalogCollapseUI();
+    renderLayoutState();
     els.catalogList.innerHTML = '';
     state.catalog.forEach(function (item, index) {
       if (item.spacing) {
@@ -378,6 +435,7 @@
       writeTransformInputs({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
       els.params.innerHTML = '<p>Select a piece to edit parameters.</p>';
       setPieceStatus('', 'info');
+      renderLayoutState();
       return;
     }
 
@@ -394,6 +452,7 @@
     } else {
       setPieceStatus('Ready', 'info');
     }
+    renderLayoutState();
   }
 
   function setTransformEnabled(enabled) {
@@ -555,6 +614,7 @@
   }
 
   function onClearPieces() {
+    if (!window.confirm('Clear the entire assembly? This will remove all parts.')) return;
     state.pieces = [];
     state.selectedPieceId = null;
     renderAssemblyList();
