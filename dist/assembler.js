@@ -2445,9 +2445,33 @@
     if (value && value.buffer instanceof ArrayBuffer) {
       return new Uint8Array(value.buffer, value.byteOffset || 0, value.byteLength || value.length || 0);
     }
-    if (typeof value === 'string') return encodeUtf8(value);
+    if (typeof value === 'string') {
+      var trimmed = value.trim();
+      if (looksLikeBase64(trimmed)) {
+        try {
+          return decodeBase64ToBytes(trimmed);
+        } catch (error) {}
+      }
+      return encodeUtf8(value);
+    }
     if (Array.isArray(value)) return new Uint8Array(value);
     throw new Error('Unsupported binary output format.');
+  }
+
+  function looksLikeBase64(text) {
+    if (!text || text.length < 16) return false;
+    if (text.length % 4 !== 0) return false;
+    return /^[A-Za-z0-9+/=\s]+$/.test(text);
+  }
+
+  function decodeBase64ToBytes(text) {
+    var clean = text.replace(/\s+/g, '');
+    var bin = atob(clean);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i += 1) {
+      bytes[i] = bin.charCodeAt(i) & 0xff;
+    }
+    return bytes;
   }
 
   function groupExportInstances(instances) {
