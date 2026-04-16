@@ -17,7 +17,7 @@
         <button id="asmDuplicateBtn" type="button">Duplicate</button>
         <button id="asmRemoveBtn" type="button">Remove</button>
         <button id="asmExportBtn" type="button">Export JSON</button>
-        <button id="asmExportTxtBtn" type="button">Export TXT</button>
+        <button id="asmExportTxtBtn" type="button">Export Assembly STLs</button>
         <button id="asmViewRefsBtn" type="button" aria-pressed="false">View Part References</button>
         <button id="asmImportBtn" type="button">Import JSON</button>
         <button id="asmClearBtn" type="button">Clear Assembly</button>
@@ -80,6 +80,20 @@
           <legend>Part status</legend>
           <div id="asmPieceStatus"></div>
         </fieldset>
+        <section id="asmExportPanel" hidden>
+          <div id="asmExportPanelHeader">
+            <h3>Manufacturing Export</h3>
+          </div>
+          <label id="asmExportDedupeRow">
+            <input id="asmExportDedupeStlsCbx" type="checkbox">
+            Compress only unique parts (remove duplicate STLs)
+          </label>
+          <p id="asmExportSummary"></p>
+          <div id="asmExportGroups"></div>
+          <div id="asmExportActions">
+            <button id="asmExportZipBtn" type="button">Generate ZIP Package</button>
+          </div>
+        </section>
       </aside>
     </div>
 
