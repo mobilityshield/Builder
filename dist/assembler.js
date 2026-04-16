@@ -11,6 +11,7 @@
   ];
 
   var state = {
+    inspectorMode: 'hidden',
     version: 1,
     catalog: FALLBACK_CATALOG.slice(),
     catalogCollapsed: false,
@@ -26,6 +27,7 @@
       rebuildSolidsInWorker: null,
       getParameterDefinitions: null,
       mergeSolids: null,
+      prepareOutput: null,
       Viewer: null
     },
     sourceCache: {},
@@ -36,7 +38,9 @@
     previewRefsRaf: 0,
     previewRefsAnimRaf: 0,
     previewRefDisplayMap: {},
-    previewRefsAnimLastTs: 0
+    previewRefsAnimLastTs: 0,
+    exportBusy: false,
+    exportDeduplicateStls: false
   };
 
   var els = {};
@@ -68,6 +72,7 @@
       if (typeof bundleRequire !== 'function') throw new Error('dist/min.js did not evaluate to a Browserify require function');
 
       var _r1 = bundleRequire(1);
+      var _r8 = bundleRequire(8);
       var getParameterDefinitions = bundleRequire(118);
       var _r121 = bundleRequire(121);
       var Viewer = bundleRequire(239);
@@ -76,6 +81,7 @@
       state.engine.rebuildSolidsInWorker = _r1.rebuildSolidsInWorker;
       state.engine.getParameterDefinitions = getParameterDefinitions;
       state.engine.mergeSolids = _r121.mergeSolids;
+      state.engine.prepareOutput = _r8.prepareOutput;
       state.engine.Viewer = Viewer;
 
       initViewer();
@@ -99,9 +105,12 @@
     els.inspectorHeader = document.getElementById('asmInspectorHeader');
     els.inspectorCloseBtn = document.getElementById('asmInspectorCloseBtn');
     els.partIdInput = document.getElementById('asmPartIdInput');
+    els.partIdWrap = document.getElementById('asmPartIdWrap');
+    els.transformForm = document.getElementById('asmTransformForm');
     els.paramsWrap = document.getElementById('asmParamsWrap');
     els.params = document.getElementById('asmParams');
     els.pieceStatus = document.getElementById('asmPieceStatus');
+    els.pieceStatusWrap = document.getElementById('asmPieceStatusWrap');
     els.viewerHost = document.getElementById('asmViewer');
     els.viewerPanel = document.getElementById('asmViewerPanel');
     els.previewRefs = document.getElementById('asmPreviewRefs');
@@ -123,6 +132,11 @@
     els.rotX = document.getElementById('asmRotX');
     els.rotY = document.getElementById('asmRotY');
     els.rotZ = document.getElementById('asmRotZ');
+    els.exportPanel = document.getElementById('asmExportPanel');
+    els.exportSummary = document.getElementById('asmExportSummary');
+    els.exportGroups = document.getElementById('asmExportGroups');
+    els.exportZipBtn = document.getElementById('asmExportZipBtn');
+    els.exportDedupeStlsCbx = document.getElementById('asmExportDedupeStlsCbx');
   }
 
   function wireEvents() {
@@ -132,13 +146,20 @@
     els.clearBtn.addEventListener('click', onClearPieces);
     els.exportBtn.addEventListener('click', onExport);
     els.importBtn.addEventListener('click', function () { els.importInput.click(); });
-    els.exportTxtBtn.addEventListener('click', onExportTxt);
+    els.exportTxtBtn.addEventListener('click', enterExportMode);
     if (els.viewRefsBtn) els.viewRefsBtn.addEventListener('click', togglePreviewRefsMode);
     els.importInput.addEventListener('change', onImportChange);
     els.catalogToggle.addEventListener('click', toggleCatalogList);
     els.deselectBtn.addEventListener('click', deselectSelectedPiece);
-    els.inspectorCloseBtn.addEventListener('click', deselectSelectedPiece);
+    els.inspectorCloseBtn.addEventListener('click', onInspectorCloseClick);
     els.hidePanelsBtn.addEventListener('click', hidePanels);
+    if (els.exportZipBtn) els.exportZipBtn.addEventListener('click', onExportZip);
+    if (els.exportDedupeStlsCbx) {
+      els.exportDedupeStlsCbx.addEventListener('change', function () {
+        state.exportDeduplicateStls = !!els.exportDedupeStlsCbx.checked;
+        renderInspector();
+      });
+    }
     els.partIdInput.addEventListener('change', commitPartIdChange);
     els.partIdInput.addEventListener('blur', commitPartIdChange);
     els.partIdInput.addEventListener('keydown', function (event) {
@@ -225,6 +246,9 @@
   }
 
   function togglePreviewRefsMode() {
+    if (state.inspectorMode === 'export') {
+      exitExportMode();
+    }
     setPreviewRefsEnabled(!state.previewRefsEnabled);
   }
 
@@ -378,6 +402,7 @@
   function hidePanels() {
     state.panelsHidden = !state.panelsHidden;
     state.selectedPieceId = null;
+    state.inspectorMode = 'hidden';
     renderAssemblyList();
     renderInspector();
     scheduleRender();
@@ -386,9 +411,18 @@
   function deselectSelectedPiece() {
     if (!state.selectedPieceId) return;
     state.selectedPieceId = null;
+    state.inspectorMode = 'hidden';
     renderAssemblyList();
     renderInspector();
     scheduleRender();
+  }
+
+  function onInspectorCloseClick() {
+    if (state.inspectorMode === 'export') {
+      exitExportMode();
+      return;
+    }
+    deselectSelectedPiece();
   }
 
   function selectPieceById(pieceId) {
@@ -401,6 +435,7 @@
       }
     }
     if (!exists) return;
+    state.inspectorMode = 'piece';
     state.selectedPieceId = pieceId;
     renderAssemblyList();
     renderInspector();
@@ -408,7 +443,7 @@
   }
 
   function renderLayoutState() {
-    var inspectorVisible = !state.panelsHidden && !!state.selectedPieceId;
+    var inspectorVisible = !state.panelsHidden && (state.inspectorMode === 'export' || (state.inspectorMode === 'piece' && !!state.selectedPieceId));
     var catalogVisible = !state.panelsHidden;
 
     els.layout.classList.toggle('is-panels-hidden', !catalogVisible);
@@ -424,7 +459,7 @@
     els.removeBtn.hidden = fullHidden;
     els.hidePanelsBtn.textContent = fullHidden ? 'Show Panel' : 'Hide Panel';
     els.deselectBtn.disabled = !state.selectedPieceId;
-    els.inspectorCloseBtn.disabled = !state.selectedPieceId;
+    els.inspectorCloseBtn.disabled = !(state.inspectorMode === 'export' || (state.inspectorMode === 'piece' && !!state.selectedPieceId));
 
     scheduleViewerResize();
   }
@@ -492,6 +527,15 @@
   }
 
   function renderInspector() {
+    var inspectorRoot = document.getElementById('asmInspector');
+    if (inspectorRoot) inspectorRoot.classList.toggle('is-export-mode', state.inspectorMode === 'export');
+    if (els.exportPanel) els.exportPanel.hidden = state.inspectorMode !== 'export';
+    if (state.inspectorMode === 'export') {
+      renderExportInspector();
+      renderLayoutState();
+      return;
+    }
+
     var piece = getSelectedPiece();
     if (!piece) {
       els.inspectorHeader.textContent = 'No selection';
@@ -501,10 +545,17 @@
       writeTransformInputs({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
       els.params.innerHTML = '';
       els.paramsWrap.hidden = true;
+      if (els.partIdWrap) els.partIdWrap.hidden = false;
+      if (els.transformForm) els.transformForm.hidden = false;
+      if (els.pieceStatusWrap) els.pieceStatusWrap.hidden = false;
       setPieceStatus('', 'info');
       renderLayoutState();
       return;
     }
+
+    if (els.partIdWrap) els.partIdWrap.hidden = false;
+    if (els.transformForm) els.transformForm.hidden = false;
+    if (els.pieceStatusWrap) els.pieceStatusWrap.hidden = false;
 
     els.inspectorHeader.textContent = piece.title;
     els.partIdInput.disabled = false;
@@ -521,6 +572,19 @@
       setPieceStatus('Ready', 'info');
     }
     renderLayoutState();
+  }
+
+  function renderExportInspector() {
+    els.inspectorHeader.textContent = 'Export Assembly Package';
+    els.partIdInput.disabled = true;
+    els.partIdInput.value = '';
+    setTransformEnabled(false);
+    writeTransformInputs({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+    els.paramsWrap.hidden = true;
+    if (els.partIdWrap) els.partIdWrap.hidden = true;
+    if (els.transformForm) els.transformForm.hidden = true;
+    if (els.pieceStatusWrap) els.pieceStatusWrap.hidden = true;
+    renderExportPanelContent();
   }
 
   function setTransformEnabled(enabled) {
@@ -628,6 +692,7 @@
     var piece = makePieceFromCatalog(item);
     state.pieces.push(piece);
     state.selectedPieceId = piece.id;
+    state.inspectorMode = 'piece';
     renderAssemblyList();
     renderInspector();
     rebuildPiece(piece);
@@ -653,6 +718,7 @@
     };
     state.pieces.push(copy);
     state.selectedPieceId = copy.id;
+    state.inspectorMode = 'piece';
     renderAssemblyList();
     renderInspector();
     rebuildPiece(copy);
@@ -672,8 +738,10 @@
     if (state.pieces.length) {
       var nextIndex = Math.min(index, state.pieces.length - 1);
       state.selectedPieceId = state.pieces[nextIndex].id;
+      state.inspectorMode = 'piece';
     } else {
       state.selectedPieceId = null;
+      state.inspectorMode = 'hidden';
     }
 
     renderAssemblyList();
@@ -685,6 +753,7 @@
     if (!window.confirm('Clear the entire assembly? This will remove all parts.')) return;
     state.pieces = [];
     state.selectedPieceId = null;
+    state.inspectorMode = 'hidden';
     renderAssemblyList();
     renderInspector();
     if (state.viewer) state.viewer.clear();
@@ -1009,7 +1078,7 @@
     state.previewRefEntries = previewEntries;
 
     renderAssemblyList();
-    if (getSelectedPiece()) renderInspector();
+    if (state.inspectorMode === 'export' || getSelectedPiece()) renderInspector();
 
     if (!all.length) {
       state.viewer.clear();
@@ -2142,41 +2211,113 @@
     return String(value);
   }
 
-  function getPieceExportParameters(piece) {
-    var cache = state.sourceCache[piece.file];
-    if (cache && Array.isArray(cache.paramDefinitions) && cache.paramDefinitions.length) {
-      var effective = getEffectiveParams(piece, cache.defaultParams || {});
-      return cache.paramDefinitions.reduce(function (parts, definition) {
-        if (!definition || !definition.name) return parts;
-        var type = String(definition.type || 'text').toLowerCase();
-        if (type === 'group') return parts;
-        parts.push(definition.name + ': ' + formatPartParameterValue(effective[definition.name]));
-        return parts;
-      }, []);
-    }
+  function enterExportMode() {
+    state.selectedPieceId = null;
+    state.inspectorMode = 'export';
+    setPreviewRefsEnabled(false);
+    renderAssemblyList();
+    renderInspector();
+    scheduleRender();
+  }
 
-    return Object.keys(piece.paramsDiff || {}).sort().map(function (key) {
-      return key + ': ' + formatPartParameterValue(piece.paramsDiff[key]);
+  function exitExportMode() {
+    state.inspectorMode = state.selectedPieceId ? 'piece' : 'hidden';
+    renderInspector();
+    renderAssemblyList();
+    scheduleRender();
+  }
+
+  function renderExportPanelContent() {
+    var meta = buildExportMetaSync();
+    if (els.exportSummary) {
+      els.exportSummary.textContent = meta.instances.length
+        ? ('Review ' + meta.instances.length + ' parts grouped into ' + meta.groups.length + ' manufacturing references.')
+        : 'No parts in the current assembly.';
+    }
+    if (els.exportDedupeStlsCbx) {
+      els.exportDedupeStlsCbx.checked = !!state.exportDeduplicateStls;
+      els.exportDedupeStlsCbx.disabled = state.exportBusy || !meta.instances.length;
+    }
+    renderExportGroups(meta.groups);
+    if (els.exportZipBtn) {
+      els.exportZipBtn.disabled = state.exportBusy || !meta.instances.length;
+      els.exportZipBtn.textContent = state.exportBusy ? 'Generating ZIP…' : 'Generate ZIP Package';
+    }
+  }
+
+  function renderExportGroups(groups) {
+    if (!els.exportGroups) return;
+    els.exportGroups.innerHTML = '';
+    groups.forEach(function (group, index) {
+      var card = document.createElement('section');
+      card.className = 'asm-export-group';
+      var title = document.createElement('h4');
+      title.textContent = 'Group ' + String(index + 1) + ' · Qty ' + group.quantity;
+      card.appendChild(title);
+      var info = document.createElement('p');
+      info.className = 'asm-export-meta';
+      info.innerHTML = '<b>Source</b>: ' + escapeHtml(formatSourceName(group.file));
+      card.appendChild(info);
+      var partListLabel = document.createElement('p');
+      partListLabel.className = 'asm-export-meta';
+      var refsText = (group.partRefs || []).join(', ');
+      partListLabel.innerHTML = '<b>Parts list</b>: ' + escapeHtml(refsText);
+      card.appendChild(partListLabel);
+      var paramsToggle = buildCollapsibleParams(group.effectiveParams);
+      if (paramsToggle) card.appendChild(paramsToggle);
+      els.exportGroups.appendChild(card);
     });
   }
 
-  function onExportTxt() {
-    var lines = state.pieces.map(function (piece, index) {
-      var params = getPieceExportParameters(piece);
-      var paramsText = params.length ? params.join(', ') : 'NONE';
-      return [String(index + 1), piece.title, piece.id, paramsText].join(' - ');
+  function buildCollapsibleParams(params) {
+    var keys = Object.keys(params || {});
+    if (!keys.length) return null;
+    var details = document.createElement('details');
+    details.className = 'asm-export-params-toggle';
+    var summary = document.createElement('summary');
+    summary.textContent = 'Parameters';
+    details.appendChild(summary);
+    details.appendChild(buildParamsList(params));
+    return details;
+  }
+
+  function buildParamsList(params) {
+    var entries = Object.keys(params || {}).sort();
+    var list = document.createElement('ul');
+    list.className = 'asm-export-param-list';
+    if (!entries.length) {
+      var empty = document.createElement('li');
+      empty.textContent = 'No parameters';
+      list.appendChild(empty);
+      return list;
+    }
+    entries.forEach(function (key) {
+      var row = document.createElement('li');
+      row.textContent = key + ': ' + formatPartParameterValue(params[key]);
+      list.appendChild(row);
     });
-    var body = lines.join('\n');
-    var blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'assembly-reference.txt';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    setGlobalStatus('Exported assembly-reference.txt', 'info');
+    return list;
+  }
+
+  function buildExportMetaSync() {
+    var usedNames = {};
+    var instances = state.pieces.map(function (piece, index) {
+      var normalizedFile = normalizeModelFilePath(piece.file);
+      var cache = state.sourceCache[normalizedFile];
+      var defaults = cache ? (cache.defaultParams || {}) : {};
+      var effectiveParams = getEffectiveParams(piece, defaults);
+      return {
+        index: index,
+        id: piece.id,
+        partRef: makePartReference(index + 1, piece.id),
+        title: piece.title,
+        file: normalizedFile,
+        effectiveParams: effectiveParams,
+        stlFilename: makeUniqueStlFileName(index + 1, normalizedFile, piece.id, usedNames)
+      };
+    });
+    var groups = groupExportInstances(instances);
+    return { instances: instances, groups: groups };
   }
 
   function onExport() {
@@ -2211,6 +2352,386 @@
     a.remove();
     URL.revokeObjectURL(url);
     setGlobalStatus('Exported assembly.json', 'info');
+  }
+
+  async function onExportZip() {
+    if (state.exportBusy) return;
+    state.exportBusy = true;
+    renderInspector();
+    try {
+      var prepared = await buildExportPreparationData();
+      var textBody = buildReferenceTxt(prepared.instances, prepared.groups);
+      var files = [{ name: 'assembly-reference.txt', data: encodeUtf8(textBody), type: 'text/plain;charset=utf-8' }];
+
+      var stlEntries = state.exportDeduplicateStls
+        ? getDeduplicatedStlEntries(prepared.instances, prepared.groups)
+        : prepared.instances;
+
+      for (var i = 0; i < stlEntries.length; i += 1) {
+        var entry = stlEntries[i];
+        files.push({
+          name: entry.stlFilename,
+          data: entry.stlBytes,
+          type: 'model/stl'
+        });
+      }
+
+      var zipBlob = buildZipBlob(files);
+      triggerDownload(zipBlob, 'assembly-manufacturing-export.zip');
+      setGlobalStatus('Exported assembly-manufacturing-export.zip', 'info');
+    } catch (error) {
+      setGlobalStatus('Manufacturing export failed: ' + errorMessage(error), 'error');
+    } finally {
+      state.exportBusy = false;
+      renderInspector();
+    }
+  }
+
+  async function buildExportPreparationData() {
+    await ensureAssemblyStableState();
+    var usedNames = {};
+    var instances = [];
+
+    for (var i = 0; i < state.pieces.length; i += 1) {
+      var piece = state.pieces[i];
+      var cache = await ensureSource(piece);
+      var effectiveParams = getEffectiveParams(piece, cache.defaultParams || {});
+      var token = piece.buildToken + 1;
+      piece.buildToken = token;
+      var result = await buildWithWorkerOrMain(piece, cache, effectiveParams, token);
+      if (result && result.stale) throw new Error('Stale export build for ' + piece.id + '.');
+      var objects = Array.isArray(result.objects) ? result.objects : [];
+      if (!objects.length) throw new Error('No geometry produced for ' + piece.id + '.');
+      var stlBytes = serializeObjectsToStlBytes(objects);
+      instances.push({
+        index: i,
+        id: piece.id,
+        partRef: makePartReference(i + 1, piece.id),
+        title: piece.title,
+        file: normalizeModelFilePath(piece.file),
+        effectiveParams: effectiveParams,
+        stlFilename: makeUniqueStlFileName(i + 1, piece.file, piece.id, usedNames),
+        stlBytes: stlBytes
+      });
+    }
+
+    return {
+      instances: instances,
+      groups: groupExportInstances(instances)
+    };
+  }
+
+  async function ensureAssemblyStableState() {
+    var timeoutAt = Date.now() + 12000;
+    while (state.pieces.some(function (piece) { return piece.loading; })) {
+      if (Date.now() > timeoutAt) throw new Error('Timed out waiting for part rebuild to finish.');
+      await delay(80);
+    }
+    var failing = state.pieces.find(function (piece) { return !!piece.error; });
+    if (failing) throw new Error('Part has build errors: ' + failing.id + ' (' + failing.error + ')');
+  }
+
+  function serializeObjectsToStlBytes(objects) {
+    if (!state.engine.prepareOutput) throw new Error('STL serializer unavailable.');
+    var output = state.engine.prepareOutput(objects, { format: 'stla', version: '0.0.0' });
+    var data = output && output.data;
+    if (!Array.isArray(data) || !data.length) throw new Error('STL serializer returned no data.');
+    if (typeof data[0] === 'string') {
+      return encodeUtf8(data.join(''));
+    }
+    return normalizeBinaryData(data[0]);
+  }
+
+  function normalizeBinaryData(value) {
+    if (value instanceof Uint8Array) return value;
+    if (value instanceof ArrayBuffer) return new Uint8Array(value);
+    if (value && value.buffer instanceof ArrayBuffer) {
+      return new Uint8Array(value.buffer, value.byteOffset || 0, value.byteLength || value.length || 0);
+    }
+    if (typeof value === 'string') {
+      var trimmed = value.trim();
+      if (looksLikeBase64(trimmed)) {
+        try {
+          return decodeBase64ToBytes(trimmed);
+        } catch (error) {}
+      }
+      return encodeUtf8(value);
+    }
+    if (Array.isArray(value)) return new Uint8Array(value);
+    throw new Error('Unsupported binary output format.');
+  }
+
+  function looksLikeBase64(text) {
+    if (!text || text.length < 16) return false;
+    if (text.length % 4 !== 0) return false;
+    return /^[A-Za-z0-9+/=\s]+$/.test(text);
+  }
+
+  function decodeBase64ToBytes(text) {
+    var clean = text.replace(/\s+/g, '');
+    var bin = atob(clean);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i += 1) {
+      bytes[i] = bin.charCodeAt(i) & 0xff;
+    }
+    return bytes;
+  }
+
+  function groupExportInstances(instances) {
+    var map = Object.create(null);
+    instances.forEach(function (instance) {
+      var key = stableStringify({
+        file: normalizeModelFilePath(instance.file),
+        effectiveParams: instance.effectiveParams || {}
+      });
+      if (!map[key]) {
+        map[key] = {
+          file: normalizeModelFilePath(instance.file),
+          effectiveParams: cloneValue(instance.effectiveParams || {}),
+          quantity: 0,
+          instanceIds: [],
+          partRefs: [],
+          stlFilenames: []
+        };
+      }
+      map[key].quantity += 1;
+      map[key].instanceIds.push(instance.id);
+      map[key].partRefs.push(instance.partRef || instance.id);
+      map[key].stlFilenames.push(instance.stlFilename);
+    });
+    return Object.keys(map).map(function (key) { return map[key]; }).sort(compareGroupsByPartId);
+  }
+
+  function buildReferenceTxt(instances, groups) {
+    var lines = [];
+    lines.push('ASSEMBLY MANUFACTURING EXPORT');
+    lines.push('');
+    lines.push('TOTAL PARTS: ' + instances.length);
+    lines.push('GROUPS: ' + groups.length);
+    lines.push('');
+    lines.push('GROUPED BOM');
+    groups.forEach(function (group, idx) {
+      lines.push('');
+      lines.push('[' + (idx + 1) + '] Qty ' + group.quantity);
+      lines.push('NAME: ' + formatSourceName(group.file));
+      lines.push('Part Reference: ' + group.instanceIds.join(', '));
+      lines.push('STL files: ' + group.stlFilenames.join(', '));
+      var keys = Object.keys(group.effectiveParams || {}).sort();
+      if (!keys.length) {
+        lines.push('Parameters: NONE');
+      } else {
+        lines.push('Parameters:');
+        keys.forEach(function (key) {
+          lines.push('  - ' + key + ': ' + formatPartParameterValue(group.effectiveParams[key]));
+        });
+      }
+    });
+    lines.push('');
+    return lines.join('\n');
+  }
+
+  function formatSourceName(filePath) {
+    var normalized = normalizeModelFilePath(filePath);
+    var name = normalized.split('/').pop() || normalized;
+    name = name.replace(/\.jscad$/i, '');
+    name = name.replace(/[-_]+/g, ' ').trim();
+    if (!name) return 'Part';
+    return name.split(/\s+/).map(function (chunk) {
+      return chunk.charAt(0).toUpperCase() + chunk.slice(1);
+    }).join(' ');
+  }
+
+  function escapeHtml(text) {
+    return String(text || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function compareGroupsByPartId(a, b) {
+    var aNum = getSmallestPartIdNumber(a.instanceIds || []);
+    var bNum = getSmallestPartIdNumber(b.instanceIds || []);
+    if (aNum !== bNum) return aNum - bNum;
+    var aRef = (a.instanceIds && a.instanceIds[0]) || '';
+    var bRef = (b.instanceIds && b.instanceIds[0]) || '';
+    return String(aRef).localeCompare(String(bRef));
+  }
+
+  function getSmallestPartIdNumber(ids) {
+    var best = Number.POSITIVE_INFINITY;
+    (ids || []).forEach(function (id) {
+      var match = String(id || '').match(/\d+/);
+      if (!match) return;
+      var n = Number(match[0]);
+      if (Number.isFinite(n)) best = Math.min(best, n);
+    });
+    return Number.isFinite(best) ? best : Number.MAX_SAFE_INTEGER;
+  }
+
+  function makePartReference(instanceNumber, partName) {
+    var numericId = String(Number(instanceNumber) || 0).padStart(3, '0');
+    var safePartName = sanitizePieceId(partName, 'piece');
+    return numericId + '_' + safePartName;
+  }
+
+  function makeUniqueStlFileName(instanceNumber, filePath, partName, usedNames) {
+    var numericId = String(Number(instanceNumber) || 0).padStart(3, '0');
+    var normalized = normalizeModelFilePath(filePath);
+    var fileBase = normalized.split('/').pop() || 'part';
+    fileBase = fileBase.replace(/\.jscad$/i, '');
+    var safeFileBase = sanitizePieceId(fileBase, 'part');
+    var safePartName = sanitizePieceId(partName, 'piece');
+    var base = numericId + '_' + safeFileBase + '_' + safePartName;
+    var candidate = base + '.stl';
+    var suffix = 2;
+    while (usedNames[candidate]) {
+      candidate = base + '_' + suffix + '.stl';
+      suffix += 1;
+    }
+    usedNames[candidate] = true;
+    return candidate;
+  }
+
+  function buildZipBlob(files) {
+    var writer = createSimpleZipWriter();
+    files.forEach(function (file) {
+      writer.addFile(file.name, file.data);
+    });
+    return writer.toBlob();
+  }
+
+  function getDeduplicatedStlEntries(instances, groups) {
+    var byName = Object.create(null);
+    (instances || []).forEach(function (instance) {
+      if (!instance || !instance.stlFilename) return;
+      byName[instance.stlFilename] = instance;
+    });
+    return (groups || []).map(function (group) {
+      if (!group || !group.stlFilenames || !group.stlFilenames.length) return null;
+      return byName[group.stlFilenames[0]] || null;
+    }).filter(Boolean);
+  }
+
+  function triggerDownload(blob, filename) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function encodeUtf8(text) {
+    return new TextEncoder().encode(String(text || ''));
+  }
+
+  function delay(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms || 0); });
+  }
+
+  function createSimpleZipWriter() {
+    var localParts = [];
+    var centralParts = [];
+    var offset = 0;
+
+    return {
+      addFile: function (name, bytes) {
+        var fileNameBytes = encodeUtf8(name);
+        var data = normalizeBinaryData(bytes);
+        var crc = crc32(data);
+        var localHeader = createLocalFileHeader(fileNameBytes, crc, data.length);
+        localParts.push(localHeader, data);
+        var localSize = localHeader.length + data.length;
+        var centralHeader = createCentralDirectoryHeader(fileNameBytes, crc, data.length, offset);
+        centralParts.push(centralHeader);
+        offset += localSize;
+      },
+      toBlob: function () {
+        var centralSize = centralParts.reduce(function (sum, part) { return sum + part.length; }, 0);
+        var endRecord = createEndOfCentralDirectory(centralParts.length, centralSize, offset);
+        return new Blob(localParts.concat(centralParts).concat([endRecord]), { type: 'application/zip' });
+      }
+    };
+  }
+
+  function createLocalFileHeader(nameBytes, crc, size) {
+    var out = new Uint8Array(30 + nameBytes.length);
+    var view = new DataView(out.buffer);
+    view.setUint32(0, 0x04034b50, true);
+    view.setUint16(4, 20, true);
+    view.setUint16(6, 0, true);
+    view.setUint16(8, 0, true);
+    view.setUint16(10, 0, true);
+    view.setUint16(12, 0, true);
+    view.setUint32(14, crc >>> 0, true);
+    view.setUint32(18, size, true);
+    view.setUint32(22, size, true);
+    view.setUint16(26, nameBytes.length, true);
+    view.setUint16(28, 0, true);
+    out.set(nameBytes, 30);
+    return out;
+  }
+
+  function createCentralDirectoryHeader(nameBytes, crc, size, localOffset) {
+    var out = new Uint8Array(46 + nameBytes.length);
+    var view = new DataView(out.buffer);
+    view.setUint32(0, 0x02014b50, true);
+    view.setUint16(4, 20, true);
+    view.setUint16(6, 20, true);
+    view.setUint16(8, 0, true);
+    view.setUint16(10, 0, true);
+    view.setUint16(12, 0, true);
+    view.setUint16(14, 0, true);
+    view.setUint32(16, crc >>> 0, true);
+    view.setUint32(20, size, true);
+    view.setUint32(24, size, true);
+    view.setUint16(28, nameBytes.length, true);
+    view.setUint16(30, 0, true);
+    view.setUint16(32, 0, true);
+    view.setUint16(34, 0, true);
+    view.setUint16(36, 0, true);
+    view.setUint32(38, 0, true);
+    view.setUint32(42, localOffset, true);
+    out.set(nameBytes, 46);
+    return out;
+  }
+
+  function createEndOfCentralDirectory(fileCount, centralSize, centralOffset) {
+    var out = new Uint8Array(22);
+    var view = new DataView(out.buffer);
+    view.setUint32(0, 0x06054b50, true);
+    view.setUint16(4, 0, true);
+    view.setUint16(6, 0, true);
+    view.setUint16(8, fileCount, true);
+    view.setUint16(10, fileCount, true);
+    view.setUint32(12, centralSize, true);
+    view.setUint32(16, centralOffset, true);
+    view.setUint16(20, 0, true);
+    return out;
+  }
+
+  var CRC32_TABLE = (function () {
+    var table = new Uint32Array(256);
+    for (var i = 0; i < 256; i += 1) {
+      var c = i;
+      for (var j = 0; j < 8; j += 1) {
+        c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      }
+      table[i] = c >>> 0;
+    }
+    return table;
+  })();
+
+  function crc32(bytes) {
+    var crc = 0 ^ (-1);
+    for (var i = 0; i < bytes.length; i += 1) {
+      crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ bytes[i]) & 0xff];
+    }
+    return (crc ^ (-1)) >>> 0;
   }
 
   function onImportChange(event) {
@@ -2274,6 +2795,7 @@
 
     state.pieces = newPieces;
     state.selectedPieceId = newPieces.length ? newPieces[0].id : null;
+    state.inspectorMode = newPieces.length ? 'piece' : 'hidden';
     renderAssemblyList();
     renderInspector();
 
