@@ -33,7 +33,10 @@
     pieces: [],
     previewRefsEnabled: false,
     previewRefEntries: [],
-    previewRefsRaf: 0
+    previewRefsRaf: 0,
+    previewRefsAnimRaf: 0,
+    previewRefDisplayMap: {},
+    previewRefsAnimLastTs: 0
   };
 
   var els = {};
@@ -1218,6 +1221,12 @@
   }
 
   function clearPreviewRefsOverlay() {
+    if (state.previewRefsAnimRaf) {
+      cancelAnimationFrame(state.previewRefsAnimRaf);
+      state.previewRefsAnimRaf = 0;
+    }
+    state.previewRefsAnimLastTs = 0;
+    state.previewRefDisplayMap = {};
     if (els.previewRefsLayer) els.previewRefsLayer.innerHTML = '';
     if (els.previewRefsSvg) els.previewRefsSvg.innerHTML = '';
   }
@@ -1238,35 +1247,195 @@
     }
 
     var projectedItems = projectPreviewRefEntries(width, height);
-    els.previewRefsLayer.innerHTML = '';
-    els.previewRefsSvg.innerHTML = '';
-    if (!projectedItems.length) return;
+    if (!projectedItems.length) {
+      clearPreviewRefsOverlay();
+      return;
+    }
 
     projectedItems.sort(function (a, b) {
       return a.screenY - b.screenY;
     });
 
     projectedItems.forEach(function (item) {
-      item.labelEl = buildPreviewRefLabel(item);
+      var display = ensurePreviewRefDisplayItem(item);
+      item.labelEl = display.labelEl;
       item.labelEl.style.visibility = 'hidden';
-      els.previewRefsLayer.appendChild(item.labelEl);
       var rect = item.labelEl.getBoundingClientRect();
       item.labelWidth = Math.max(32, Math.ceil(rect.width));
       item.labelHeight = Math.max(32, Math.ceil(rect.height));
     });
 
     layoutPreviewRefItems(projectedItems, width, height);
+    syncPreviewRefDisplayTargets(projectedItems);
+  }
 
-    projectedItems.forEach(function (item) {
-      item.labelEl.style.left = item.labelRect.x + 'px';
-      item.labelEl.style.top = item.labelRect.y + 'px';
-      item.labelEl.style.visibility = 'visible';
-      item.renderRect = getOverlayRelativeRect(item.labelEl, els.previewRefs) || item.labelRect;
+  function ensurePreviewRefDisplayItem(item) {
+    var display = state.previewRefDisplayMap[item.pieceId];
+    if (!display) {
+      var labelEl = buildPreviewRefLabel(item);
+      var lineEl = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      lineEl.setAttribute('class', 'asm-preview-ref-line');
+      var dotEl = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dotEl.setAttribute('class', 'asm-preview-ref-dot');
+      dotEl.setAttribute('r', '3.5');
+      if (els.previewRefsSvg) {
+        els.previewRefsSvg.appendChild(lineEl);
+        els.previewRefsSvg.appendChild(dotEl);
+      }
+      if (els.previewRefsLayer) els.previewRefsLayer.appendChild(labelEl);
+      display = {
+        pieceId: item.pieceId,
+        labelEl: labelEl,
+        lineEl: lineEl,
+        dotEl: dotEl,
+        currentRect: null,
+        targetRect: null,
+        guidePoint: null
+      };
+      state.previewRefDisplayMap[item.pieceId] = display;
+    }
+
+    updatePreviewRefLabel(display.labelEl, item);
+    return display;
+  }
+
+  function updatePreviewRefLabel(labelEl, item) {
+    if (!labelEl || !item) return;
+    labelEl.dataset.pieceId = item.pieceId;
+    labelEl.title = item.refNumber + ' · ' + item.title + ' · ' + item.customName;
+    labelEl.setAttribute('aria-label', 'Select part reference ' + item.refNumber + ' for ' + item.title);
+    labelEl.classList.toggle('is-selected', !!item.selected);
+    if (labelEl._asmRefIndexEl) labelEl._asmRefIndexEl.textContent = String(item.refNumber);
+  }
+
+  function syncPreviewRefDisplayTargets(items) {
+    var seen = {};
+
+    items.forEach(function (item) {
+      var display = ensurePreviewRefDisplayItem(item);
+      seen[item.pieceId] = true;
+      display.guidePoint = item.originPoint || item.guidePoint || { x: item.anchorX, y: item.anchorY };
+      display.targetRect = {
+        x: item.labelRect.x,
+        y: item.labelRect.y,
+        w: item.labelRect.w,
+        h: item.labelRect.h
+      };
+      if (!display.currentRect) {
+        display.currentRect = {
+          x: display.targetRect.x,
+          y: display.targetRect.y,
+          w: display.targetRect.w,
+          h: display.targetRect.h
+        };
+      } else {
+        display.currentRect.w = display.targetRect.w;
+        display.currentRect.h = display.targetRect.h;
+      }
+      display.labelEl.style.zIndex = item.selected ? '3' : '1';
+      display.labelEl.style.visibility = 'visible';
+      display.lineEl.style.display = '';
+      display.dotEl.style.display = '';
     });
 
-    projectedItems.forEach(function (item) {
-      appendPreviewGuide(els.previewRefsSvg, item);
+    Object.keys(state.previewRefDisplayMap).forEach(function (pieceId) {
+      if (seen[pieceId]) return;
+      var display = state.previewRefDisplayMap[pieceId];
+      if (display) {
+        if (display.labelEl && display.labelEl.parentNode) display.labelEl.parentNode.removeChild(display.labelEl);
+        if (display.lineEl && display.lineEl.parentNode) display.lineEl.parentNode.removeChild(display.lineEl);
+        if (display.dotEl && display.dotEl.parentNode) display.dotEl.parentNode.removeChild(display.dotEl);
+      }
+      delete state.previewRefDisplayMap[pieceId];
     });
+
+    renderPreviewRefDisplayFrame(false);
+    schedulePreviewRefAnimation();
+  }
+
+  function schedulePreviewRefAnimation() {
+    if (state.previewRefsAnimRaf || !state.previewRefsEnabled) return;
+    state.previewRefsAnimRaf = requestAnimationFrame(stepPreviewRefAnimation);
+  }
+
+  function stepPreviewRefAnimation(timestamp) {
+    state.previewRefsAnimRaf = 0;
+    if (!state.previewRefsEnabled) return;
+    var keepAnimating = renderPreviewRefDisplayFrame(false, timestamp);
+    if (keepAnimating) schedulePreviewRefAnimation();
+  }
+
+  function renderPreviewRefDisplayFrame(forceSync, timestamp) {
+    var displays = state.previewRefDisplayMap;
+    var ids = Object.keys(displays);
+    if (!ids.length) {
+      state.previewRefsAnimLastTs = 0;
+      return false;
+    }
+
+    var dt = 16;
+    if (!forceSync && typeof timestamp === 'number' && state.previewRefsAnimLastTs) {
+      dt = Math.max(8, Math.min(40, timestamp - state.previewRefsAnimLastTs));
+    }
+    state.previewRefsAnimLastTs = typeof timestamp === 'number' ? timestamp : 0;
+
+    var baseFactor = 1 - Math.pow(0.001, dt / 180);
+    var factor = forceSync ? 1 : clamp(baseFactor, 0.18, 0.34);
+    var moving = false;
+
+    ids.forEach(function (pieceId) {
+      var display = displays[pieceId];
+      if (!display || !display.targetRect || !display.guidePoint) return;
+
+      if (!display.currentRect || forceSync) {
+        display.currentRect = {
+          x: display.targetRect.x,
+          y: display.targetRect.y,
+          w: display.targetRect.w,
+          h: display.targetRect.h
+        };
+      } else {
+        display.currentRect.x = approachValue(display.currentRect.x, display.targetRect.x, factor);
+        display.currentRect.y = approachValue(display.currentRect.y, display.targetRect.y, factor);
+        display.currentRect.w = display.targetRect.w;
+        display.currentRect.h = display.targetRect.h;
+      }
+
+      var dx = Math.abs(display.currentRect.x - display.targetRect.x);
+      var dy = Math.abs(display.currentRect.y - display.targetRect.y);
+      if (dx > 0.35 || dy > 0.35) moving = true;
+
+      applyPreviewRefDisplay(display);
+    });
+
+    return moving;
+  }
+
+  function applyPreviewRefDisplay(display) {
+    if (!display || !display.labelEl || !display.currentRect || !display.guidePoint) return;
+
+    display.labelEl.style.left = display.currentRect.x.toFixed(2) + 'px';
+    display.labelEl.style.top = display.currentRect.y.toFixed(2) + 'px';
+    display.labelEl.style.visibility = 'visible';
+
+    var attachPoint = {
+      x: display.currentRect.x + (display.currentRect.w / 2),
+      y: display.currentRect.y + (display.currentRect.h / 2)
+    };
+
+    display.lineEl.setAttribute('x1', display.guidePoint.x.toFixed(2));
+    display.lineEl.setAttribute('y1', display.guidePoint.y.toFixed(2));
+    display.lineEl.setAttribute('x2', attachPoint.x.toFixed(2));
+    display.lineEl.setAttribute('y2', attachPoint.y.toFixed(2));
+
+    display.dotEl.setAttribute('cx', display.guidePoint.x.toFixed(2));
+    display.dotEl.setAttribute('cy', display.guidePoint.y.toFixed(2));
+  }
+
+  function approachValue(current, target, factor) {
+    if (!Number.isFinite(current)) return target;
+    if (!Number.isFinite(target)) return current;
+    return current + ((target - current) * factor);
   }
 
   function projectPreviewRefEntries(width, height) {
@@ -1353,6 +1522,7 @@
     ref.className = 'asm-preview-ref-index';
     ref.textContent = String(item.refNumber);
     label.appendChild(ref);
+    label._asmRefIndexEl = ref;
 
     return label;
   }
@@ -1363,17 +1533,17 @@
     var margin = 8;
     var placedRects = [];
     var placedLines = [];
+    var orbit = buildPreviewOrbit(items, width, height, margin);
 
     items.sort(function (a, b) {
       if (!!a.selected !== !!b.selected) return a.selected ? -1 : 1;
-      var aCentrality = Math.min(a.anchorX, width - a.anchorX, a.anchorY, height - a.anchorY);
-      var bCentrality = Math.min(b.anchorX, width - b.anchorX, b.anchorY, height - b.anchorY);
-      if (aCentrality !== bCentrality) return bCentrality - aCentrality;
-      return a.anchorY - b.anchorY;
+      var angleA = Math.atan2(a.anchorY - orbit.centerY, a.anchorX - orbit.centerX);
+      var angleB = Math.atan2(b.anchorY - orbit.centerY, b.anchorX - orbit.centerX);
+      return angleA - angleB;
     });
 
     items.forEach(function (item) {
-      var candidates = buildPreviewPlacementCandidates(item, width, height);
+      var candidates = buildPreviewPlacementCandidates(item, width, height, orbit);
       var best = null;
       var bestScore = Infinity;
 
@@ -1384,14 +1554,17 @@
           w: item.labelWidth,
           h: item.labelHeight
         };
-        var attachPoint = getNearestPointOnRect(rect, item.anchorX, item.anchorY);
+        var attachPoint = {
+          x: rect.x + (rect.w / 2),
+          y: rect.y + (rect.h / 2)
+        };
         var line = {
           x1: item.originPoint.x,
           y1: item.originPoint.y,
           x2: attachPoint.x,
           y2: attachPoint.y
         };
-        var score = getPreviewPlacementScore(rect, placedRects, item, index, line, placedLines, width, height);
+        var score = getPreviewPlacementScore(rect, placedRects, item, index, line, placedLines, width, height, orbit, candidate);
         if (score < bestScore) {
           bestScore = score;
           best = {
@@ -1409,7 +1582,10 @@
           w: item.labelWidth,
           h: item.labelHeight
         };
-        var fallbackAttach = getNearestPointOnRect(fallbackRect, item.anchorX, item.anchorY);
+        var fallbackAttach = {
+          x: fallbackRect.x + (fallbackRect.w / 2),
+          y: fallbackRect.y + (fallbackRect.h / 2)
+        };
         best = {
           rect: fallbackRect,
           attachPoint: fallbackAttach,
@@ -1442,80 +1618,94 @@
     });
   }
 
-  function buildPreviewPlacementCandidates(item, width, height) {
+  function buildPreviewOrbit(items, width, height, margin) {
+    var modelRect = null;
+    items.forEach(function (item) {
+      if (!item || !item.pieceRect) return;
+      modelRect = unionRects(modelRect, item.pieceRect);
+    });
+
+    if (!modelRect) {
+      modelRect = {
+        x: width * 0.32,
+        y: height * 0.28,
+        w: width * 0.36,
+        h: height * 0.44
+      };
+    }
+
+    var centerX = clamp(modelRect.x + (modelRect.w / 2), margin, Math.max(margin, width - margin));
+    var centerY = clamp(modelRect.y + (modelRect.h / 2), margin, Math.max(margin, height - margin));
+    var minRx = Math.min(width * 0.24, 120);
+    var minRy = Math.min(height * 0.22, 96);
+    var maxRx = Math.max(minRx, Math.min(width * 0.48, (width / 2) - margin));
+    var maxRy = Math.max(minRy, Math.min(height * 0.46, (height / 2) - margin));
+    var rx = clamp((modelRect.w / 2) + 42, minRx, maxRx);
+    var ry = clamp((modelRect.h / 2) + 38, minRy, maxRy);
+
+    return {
+      centerX: centerX,
+      centerY: centerY,
+      innerRx: rx,
+      innerRy: ry,
+      modelRect: modelRect
+    };
+  }
+
+  function buildPreviewPlacementCandidates(item, width, height, orbit) {
     var labelWidth = item.labelWidth;
     var labelHeight = item.labelHeight;
-    var pieceRect = item.pieceRect;
-    var horizontalGap = 16;
-    var verticalGap = 14;
-    var diagonalGapX = 14;
-    var diagonalGapY = 10;
-    var verticalStep = Math.max(12, Math.round(labelHeight * 0.75));
-    var horizontalStep = Math.max(12, Math.round(labelWidth * 0.18));
-    var preferRight = item.anchorX < width * 0.5;
-    var preferBottom = item.anchorY < height * 0.5;
-    var primarySides = preferRight ? ['right', 'left'] : ['left', 'right'];
-    var verticalSides = preferBottom ? ['bottom', 'top'] : ['top', 'bottom'];
-    var diagonalSides = [];
-    if (preferRight && preferBottom) diagonalSides = ['bottom-right', 'top-right', 'bottom-left', 'top-left'];
-    else if (preferRight && !preferBottom) diagonalSides = ['top-right', 'bottom-right', 'top-left', 'bottom-left'];
-    else if (!preferRight && preferBottom) diagonalSides = ['bottom-left', 'top-left', 'bottom-right', 'top-right'];
-    else diagonalSides = ['top-left', 'bottom-left', 'top-right', 'bottom-right'];
+    var centerX = orbit.centerX;
+    var centerY = orbit.centerY;
+    var dx = item.anchorX - centerX;
+    var dy = item.anchorY - centerY;
+    var baseAngle = Math.atan2(dy, dx);
+    if (!Number.isFinite(baseAngle)) baseAngle = 0;
 
-    var sides = primarySides.concat(diagonalSides).concat(verticalSides);
-    var offsets = [0, -1, 1, -2, 2, -3, 3];
+    var angleOffsets = [0, -0.18, 0.18, -0.34, 0.34, -0.52, 0.52, -0.72, 0.72, -0.95, 0.95];
+    var radialOffsets = [0, 16, 32, 48];
+    var tangentOffsets = [0, -10, 10, -18, 18];
     var candidates = [];
 
-    sides.forEach(function (side) {
-      offsets.forEach(function (offset) {
-        var x = item.anchorX;
-        var y = item.anchorY;
+    radialOffsets.forEach(function (radialOffset, radialIndex) {
+      angleOffsets.forEach(function (angleOffset, angleIndex) {
+        var angle = baseAngle + angleOffset;
+        var ellipseX = centerX + Math.cos(angle) * (orbit.innerRx + radialOffset);
+        var ellipseY = centerY + Math.sin(angle) * (orbit.innerRy + radialOffset);
+        var tangentX = -Math.sin(angle);
+        var tangentY = Math.cos(angle);
 
-        if (side === 'right') {
-          x = pieceRect.x + pieceRect.w + horizontalGap + (Math.max(0, Math.abs(offset) - 1) * 4);
-          y = item.anchorY - (labelHeight / 2) + (offset * verticalStep);
-        } else if (side === 'left') {
-          x = pieceRect.x - horizontalGap - labelWidth - (Math.max(0, Math.abs(offset) - 1) * 4);
-          y = item.anchorY - (labelHeight / 2) + (offset * verticalStep);
-        } else if (side === 'bottom') {
-          x = item.anchorX - (labelWidth / 2) + (offset * horizontalStep);
-          y = pieceRect.y + pieceRect.h + verticalGap + (Math.max(0, Math.abs(offset) - 1) * 4);
-        } else if (side === 'top') {
-          x = item.anchorX - (labelWidth / 2) + (offset * horizontalStep);
-          y = pieceRect.y - labelHeight - verticalGap - (Math.max(0, Math.abs(offset) - 1) * 4);
-        } else if (side === 'top-right') {
-          x = pieceRect.x + pieceRect.w + diagonalGapX + (Math.max(0, Math.abs(offset) - 1) * 4);
-          y = pieceRect.y - labelHeight - diagonalGapY + (offset * Math.round(verticalStep * 0.6));
-        } else if (side === 'top-left') {
-          x = pieceRect.x - labelWidth - diagonalGapX - (Math.max(0, Math.abs(offset) - 1) * 4);
-          y = pieceRect.y - labelHeight - diagonalGapY + (offset * Math.round(verticalStep * 0.6));
-        } else if (side === 'bottom-right') {
-          x = pieceRect.x + pieceRect.w + diagonalGapX + (Math.max(0, Math.abs(offset) - 1) * 4);
-          y = pieceRect.y + pieceRect.h + diagonalGapY + (offset * Math.round(verticalStep * 0.6));
-        } else if (side === 'bottom-left') {
-          x = pieceRect.x - labelWidth - diagonalGapX - (Math.max(0, Math.abs(offset) - 1) * 4);
-          y = pieceRect.y + pieceRect.h + diagonalGapY + (offset * Math.round(verticalStep * 0.6));
-        }
-
-        candidates.push({ x: x, y: y, side: side });
+        tangentOffsets.forEach(function (tangentOffset, tangentIndex) {
+          var centerPosX = ellipseX + (tangentX * tangentOffset);
+          var centerPosY = ellipseY + (tangentY * tangentOffset);
+          candidates.push({
+            x: centerPosX - (labelWidth / 2),
+            y: centerPosY - (labelHeight / 2),
+            angle: angle,
+            radialOffset: radialOffset,
+            tangentOffset: tangentOffset,
+            order: (radialIndex * 100) + (angleIndex * 10) + tangentIndex
+          });
+        });
       });
     });
 
     return candidates;
   }
 
-  function getPreviewPlacementScore(rect, placed, item, candidateIndex, line, placedLines, width, height) {
-    var score = candidateIndex * 18;
+  function getPreviewPlacementScore(rect, placed, item, candidateIndex, line, placedLines, width, height, orbit, candidate) {
+    var score = (candidate && Number.isFinite(candidate.order) ? candidate.order : candidateIndex) * 3;
     var centerX = rect.x + (rect.w / 2);
     var centerY = rect.y + (rect.h / 2);
     var dx = centerX - item.anchorX;
     var dy = centerY - item.anchorY;
-    score += Math.sqrt((dx * dx) + (dy * dy)) * 0.7;
+    var lineLength = Math.sqrt((dx * dx) + (dy * dy));
+    score += lineLength * 0.55;
 
     var pieceOverlapWidth = Math.min(rect.x + rect.w, item.pieceRect.x + item.pieceRect.w) - Math.max(rect.x, item.pieceRect.x);
     var pieceOverlapHeight = Math.min(rect.y + rect.h, item.pieceRect.y + item.pieceRect.h) - Math.max(rect.y, item.pieceRect.y);
     if (pieceOverlapWidth > 0 && pieceOverlapHeight > 0) {
-      score += 20000 + (pieceOverlapWidth * pieceOverlapHeight);
+      score += 25000 + (pieceOverlapWidth * pieceOverlapHeight);
     }
 
     placed.forEach(function (other) {
@@ -1532,7 +1722,7 @@
 
     placedLines.forEach(function (otherLine) {
       if (segmentsIntersect(line.x1, line.y1, line.x2, line.y2, otherLine.x1, otherLine.y1, otherLine.x2, otherLine.y2)) {
-        score += 16000;
+        score += 18000;
       }
     });
 
@@ -1544,6 +1734,25 @@
 
     if (segmentIntersectsRect(line.x1, line.y1, line.x2, line.y2, rect)) {
       score += 6000;
+    }
+
+    if (orbit && rectIntersectsEllipse(rect, orbit.centerX, orbit.centerY, orbit.innerRx - 10, orbit.innerRy - 10)) {
+      score += 22000;
+    }
+
+    if (orbit && orbit.modelRect) {
+      var expandedModelRect = expandRect(orbit.modelRect, 10);
+      var modelCrossings = countSegmentSamplesInRect(line.x1, line.y1, line.x2, line.y2, expandedModelRect, 8);
+      if (modelCrossings > 1) score += (modelCrossings - 1) * 2600;
+    }
+
+    if (orbit) {
+      var centerCrossings = countSegmentSamplesInEllipse(line.x1, line.y1, line.x2, line.y2, orbit.centerX, orbit.centerY, orbit.innerRx * 0.92, orbit.innerRy * 0.92, 8);
+      if (centerCrossings > 2) score += (centerCrossings - 2) * 2200;
+
+      var preferredAngle = Math.atan2(item.anchorY - orbit.centerY, item.anchorX - orbit.centerX);
+      var candidateAngle = candidate && Number.isFinite(candidate.angle) ? candidate.angle : preferredAngle;
+      score += Math.abs(normalizeAngle(candidateAngle - preferredAngle)) * 2600;
     }
 
     var edgePadding = Math.min(rect.x, rect.y, Math.max(0, width - (rect.x + rect.w)), Math.max(0, height - (rect.y + rect.h)));
@@ -1565,6 +1774,92 @@
 
     distances.sort(function (a, b) { return a.d - b.d; });
     return { x: distances[0].x, y: distances[0].y };
+  }
+
+  function unionRects(base, rect) {
+    if (!rect) return base;
+    if (!base) {
+      return { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+    }
+    var minX = Math.min(base.x, rect.x);
+    var minY = Math.min(base.y, rect.y);
+    var maxX = Math.max(base.x + base.w, rect.x + rect.w);
+    var maxY = Math.max(base.y + base.h, rect.y + rect.h);
+    return {
+      x: minX,
+      y: minY,
+      w: maxX - minX,
+      h: maxY - minY
+    };
+  }
+
+  function expandRect(rect, padding) {
+    if (!rect) return null;
+    var pad = Number(padding) || 0;
+    return {
+      x: rect.x - pad,
+      y: rect.y - pad,
+      w: rect.w + (pad * 2),
+      h: rect.h + (pad * 2)
+    };
+  }
+
+  function rectIntersectsEllipse(rect, cx, cy, rx, ry) {
+    if (!rect || !rx || !ry) return false;
+    var samples = [
+      [rect.x, rect.y],
+      [rect.x + rect.w, rect.y],
+      [rect.x, rect.y + rect.h],
+      [rect.x + rect.w, rect.y + rect.h],
+      [rect.x + (rect.w / 2), rect.y + (rect.h / 2)]
+    ];
+    for (var i = 0; i < samples.length; i += 1) {
+      if (pointInsideEllipse(samples[i][0], samples[i][1], cx, cy, rx, ry)) return true;
+    }
+    return false;
+  }
+
+  function pointInsideRect(x, y, rect) {
+    if (!rect) return false;
+    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+  }
+
+  function pointInsideEllipse(x, y, cx, cy, rx, ry) {
+    if (!rx || !ry) return false;
+    var nx = (x - cx) / rx;
+    var ny = (y - cy) / ry;
+    return ((nx * nx) + (ny * ny)) <= 1;
+  }
+
+  function countSegmentSamplesInRect(x1, y1, x2, y2, rect, steps) {
+    var total = 0;
+    var sampleSteps = Math.max(2, Number(steps) || 2);
+    for (var i = 1; i < sampleSteps; i += 1) {
+      var t = i / sampleSteps;
+      var x = x1 + ((x2 - x1) * t);
+      var y = y1 + ((y2 - y1) * t);
+      if (pointInsideRect(x, y, rect)) total += 1;
+    }
+    return total;
+  }
+
+  function countSegmentSamplesInEllipse(x1, y1, x2, y2, cx, cy, rx, ry, steps) {
+    var total = 0;
+    var sampleSteps = Math.max(2, Number(steps) || 2);
+    for (var i = 1; i < sampleSteps; i += 1) {
+      var t = i / sampleSteps;
+      var x = x1 + ((x2 - x1) * t);
+      var y = y1 + ((y2 - y1) * t);
+      if (pointInsideEllipse(x, y, cx, cy, rx, ry)) total += 1;
+    }
+    return total;
+  }
+
+  function normalizeAngle(angle) {
+    var value = Number(angle) || 0;
+    while (value > Math.PI) value -= Math.PI * 2;
+    while (value < -Math.PI) value += Math.PI * 2;
+    return value;
   }
 
   function segmentIntersectsRect(x1, y1, x2, y2, rect) {
@@ -1613,10 +1908,7 @@
     if (!svgRoot || !item || !item.guidePoint || !item.labelRect) return;
 
     var visualRect = item.renderRect || item.labelRect;
-    var attachPoint = {
-      x: visualRect.x + (visualRect.w / 2),
-      y: visualRect.y + (visualRect.h / 2)
-    };
+    var attachPoint = getNearestPointOnRect(visualRect, item.guidePoint.x, item.guidePoint.y);
 
     var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line.setAttribute('class', 'asm-preview-ref-line');

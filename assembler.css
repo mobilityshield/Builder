@@ -488,14 +488,14 @@ body {
 
 .asm-preview-ref-line {
   fill: none;
-  stroke: rgba(56, 93, 143, 0.74);
+  stroke: rgba(42, 42, 46, 0.82);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .asm-preview-ref-dot {
-  fill: rgba(67, 101, 133, 0.92);
+  fill: rgba(42, 42, 46, 0.82);
 }
 
 .asm-preview-ref-label {
