@@ -2433,9 +2433,12 @@
 
   function serializeObjectsToStlBytes(objects) {
     if (!state.engine.prepareOutput) throw new Error('STL serializer unavailable.');
-    var output = state.engine.prepareOutput(objects, { format: 'stlb', version: '0.0.0' });
+    var output = state.engine.prepareOutput(objects, { format: 'stla', version: '0.0.0' });
     var data = output && output.data;
     if (!Array.isArray(data) || !data.length) throw new Error('STL serializer returned no data.');
+    if (typeof data[0] === 'string') {
+      return encodeUtf8(data.join(''));
+    }
     return normalizeBinaryData(data[0]);
   }
 
