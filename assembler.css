@@ -76,6 +76,32 @@ body {
   background: #576f8a !important;
 }
 
+#asmExportTxtBtn {
+  background: #6f5f89 !important;
+  border-color: #5f5078 !important;
+  color: #fff !important;
+}
+
+#asmExportTxtBtn:hover {
+  background: #64567d !important;
+}
+
+#asmViewRefsBtn {
+  background: #436585 !important;
+  border-color: #34516d !important;
+  color: #fff !important;
+}
+
+#asmViewRefsBtn:hover {
+  background: #395774 !important;
+}
+
+#asmViewRefsBtn.is-active {
+  background: #24384f !important;
+  border-color: #1b2b3d !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
 #asmRemoveBtn:hover,
 #asmClearBtn:hover {
   background: #805353 !important;
@@ -161,6 +187,7 @@ body {
 }
 
 #asmViewerPanel {
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -427,4 +454,107 @@ body {
   #asmLayout.is-inspector-hidden {
     grid-template-columns: 260px minmax(0, 1fr);
   }
+}
+
+
+#asmPreviewRefs {
+  position: absolute;
+  z-index: 5;
+  display: none;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+#asmPreviewRefs.is-active {
+  display: block;
+}
+
+#asmPreviewRefsSvg,
+#asmPreviewRefsLayer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#asmPreviewRefsSvg {
+  overflow: visible;
+  pointer-events: none;
+}
+
+#asmPreviewRefsLayer {
+  pointer-events: none;
+}
+
+.asm-preview-ref-line {
+  fill: none;
+  stroke: rgba(56, 93, 143, 0.74);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.asm-preview-ref-dot {
+  fill: rgba(67, 101, 133, 0.92);
+}
+
+.asm-preview-ref-label {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: calc(100% - 8px);
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid rgba(30, 40, 60, 0.2);
+  border-radius: 999px;
+  background: rgba(16, 19, 26, 0.86);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  z-index: 1;
+  touch-action: none;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.asm-preview-ref-label:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.24);
+}
+
+.asm-preview-ref-label.is-selected {
+  border-color: rgba(255, 197, 66, 0.72);
+}
+
+.asm-preview-ref-index {
+  flex: 0 0 auto;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 0 8px;
+  background: #dce6ff;
+  color: #233359;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 32px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.asm-piece-ref {
+  display: inline-block;
+  min-width: 22px;
+  margin-right: 6px;
+  border-radius: 999px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #233359;
+  background: #dce6ff;
+  text-align: center;
 }

@@ -17,6 +17,8 @@
         <button id="asmDuplicateBtn" type="button">Duplicate</button>
         <button id="asmRemoveBtn" type="button">Remove</button>
         <button id="asmExportBtn" type="button">Export JSON</button>
+        <button id="asmExportTxtBtn" type="button">Export TXT</button>
+        <button id="asmViewRefsBtn" type="button" aria-pressed="false">View Part References</button>
         <button id="asmImportBtn" type="button">Import JSON</button>
         <button id="asmClearBtn" type="button">Clear Assembly</button>
       </div>
@@ -41,6 +43,10 @@
 
       <section id="asmViewerPanel">
         <div id="asmViewer"></div>
+        <div id="asmPreviewRefs" aria-label="Assembly part references overlay" aria-hidden="true">
+          <svg id="asmPreviewRefsSvg" aria-hidden="true"></svg>
+          <div id="asmPreviewRefsLayer"></div>
+        </div>
       </section>
 
       <aside id="asmInspector">

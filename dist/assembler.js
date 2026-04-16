@@ -30,7 +30,10 @@
     },
     sourceCache: {},
     sourceCachePromises: {},
-    pieces: []
+    pieces: [],
+    previewRefsEnabled: false,
+    previewRefEntries: [],
+    previewRefsRaf: 0
   };
 
   var els = {};
@@ -98,12 +101,17 @@
     els.pieceStatus = document.getElementById('asmPieceStatus');
     els.viewerHost = document.getElementById('asmViewer');
     els.viewerPanel = document.getElementById('asmViewerPanel');
+    els.previewRefs = document.getElementById('asmPreviewRefs');
+    els.previewRefsSvg = document.getElementById('asmPreviewRefsSvg');
+    els.previewRefsLayer = document.getElementById('asmPreviewRefsLayer');
     els.importInput = document.getElementById('asmImportInput');
     els.addBtn = document.getElementById('asmAddBtn');
     els.dupBtn = document.getElementById('asmDuplicateBtn');
     els.removeBtn = document.getElementById('asmRemoveBtn');
     els.exportBtn = document.getElementById('asmExportBtn');
     els.importBtn = document.getElementById('asmImportBtn');
+    els.exportTxtBtn = document.getElementById('asmExportTxtBtn');
+    els.viewRefsBtn = document.getElementById('asmViewRefsBtn');
     els.clearBtn = document.getElementById('asmClearBtn');
     els.hidePanelsBtn = document.getElementById('asmHidePanelsBtn');
     els.posX = document.getElementById('asmPosX');
@@ -121,6 +129,8 @@
     els.clearBtn.addEventListener('click', onClearPieces);
     els.exportBtn.addEventListener('click', onExport);
     els.importBtn.addEventListener('click', function () { els.importInput.click(); });
+    els.exportTxtBtn.addEventListener('click', onExportTxt);
+    if (els.viewRefsBtn) els.viewRefsBtn.addEventListener('click', togglePreviewRefsMode);
     els.importInput.addEventListener('change', onImportChange);
     els.catalogToggle.addEventListener('click', toggleCatalogList);
     els.deselectBtn.addEventListener('click', deselectSelectedPiece);
@@ -162,7 +172,9 @@
       axis: { draw: true },
       solid: { faces: true, lines: false }
     });
+    installPreviewRefsHooks();
     state.viewer.clear();
+    syncPreviewRefsViewport();
   }
 
   function installViewerResizeHandlers() {
@@ -192,7 +204,55 @@
         } else if (typeof state.viewer.onDraw === 'function') {
           state.viewer.onDraw();
         }
+        syncPreviewRefsViewport();
+        renderPreviewRefs();
       } catch (error) {}
+    });
+  }
+
+  function installPreviewRefsHooks() {
+    if (!state.viewer || state.viewer.__asmPreviewRefsWrapped) return;
+    var originalOnDraw = typeof state.viewer.onDraw === 'function' ? state.viewer.onDraw.bind(state.viewer) : null;
+    state.viewer.__asmPreviewRefsWrapped = true;
+    state.viewer.onDraw = function () {
+      var result = originalOnDraw ? originalOnDraw.apply(state.viewer, arguments) : undefined;
+      schedulePreviewRefsOverlayUpdate();
+      return result;
+    };
+  }
+
+  function togglePreviewRefsMode() {
+    setPreviewRefsEnabled(!state.previewRefsEnabled);
+  }
+
+  function setPreviewRefsEnabled(enabled) {
+    state.previewRefsEnabled = !!enabled;
+    if (els.viewRefsBtn) {
+      els.viewRefsBtn.setAttribute('aria-pressed', state.previewRefsEnabled ? 'true' : 'false');
+      els.viewRefsBtn.classList.toggle('is-active', state.previewRefsEnabled);
+    }
+    if (els.previewRefs) {
+      els.previewRefs.classList.toggle('is-active', state.previewRefsEnabled);
+      els.previewRefs.setAttribute('aria-hidden', state.previewRefsEnabled ? 'false' : 'true');
+    }
+    renderPreviewRefs();
+  }
+
+  function syncPreviewRefsViewport() {
+    if (!els.previewRefs || !els.viewerHost) return;
+    var width = Math.max(els.viewerHost.clientWidth || 0, 0);
+    var height = Math.max(els.viewerHost.clientHeight || 0, 0);
+    els.previewRefs.style.left = (els.viewerHost.offsetLeft || 0) + 'px';
+    els.previewRefs.style.top = (els.viewerHost.offsetTop || 0) + 'px';
+    els.previewRefs.style.width = width + 'px';
+    els.previewRefs.style.height = height + 'px';
+  }
+
+  function schedulePreviewRefsOverlayUpdate() {
+    if (state.previewRefsRaf) return;
+    state.previewRefsRaf = requestAnimationFrame(function () {
+      state.previewRefsRaf = 0;
+      updatePreviewRefsOverlay();
     });
   }
 
@@ -328,6 +388,22 @@
     scheduleRender();
   }
 
+  function selectPieceById(pieceId) {
+    if (!pieceId) return;
+    var exists = false;
+    for (var i = 0; i < state.pieces.length; i += 1) {
+      if (state.pieces[i] && state.pieces[i].id === pieceId) {
+        exists = true;
+        break;
+      }
+    }
+    if (!exists) return;
+    state.selectedPieceId = pieceId;
+    renderAssemblyList();
+    renderInspector();
+    scheduleRender();
+  }
+
   function renderLayoutState() {
     var inspectorVisible = !state.panelsHidden && !!state.selectedPieceId;
     var catalogVisible = !state.panelsHidden;
@@ -393,17 +469,20 @@
 
   function renderAssemblyList() {
     els.pieceList.innerHTML = '';
-    state.pieces.forEach(function (piece) {
+    state.pieces.forEach(function (piece, index) {
       var li = document.createElement('li');
-      li.textContent = piece.title + ' (' + piece.id + ')';
+
+      var ref = document.createElement('span');
+      ref.className = 'asm-piece-ref';
+      ref.textContent = String(index + 1);
+      li.appendChild(ref);
+
+      li.appendChild(document.createTextNode(piece.title + ' (' + piece.id + ')'));
       if (piece.id === state.selectedPieceId) li.classList.add('is-selected');
       if (piece.loading) li.classList.add('is-loading');
       if (piece.error) li.classList.add('is-error');
       li.addEventListener('click', function () {
-        state.selectedPieceId = piece.id;
-        renderAssemblyList();
-        renderInspector();
-        scheduleRender();
+        selectPieceById(piece.id);
       });
       els.pieceList.appendChild(li);
     });
@@ -606,6 +685,7 @@
     renderAssemblyList();
     renderInspector();
     if (state.viewer) state.viewer.clear();
+    renderPreviewRefs();
   }
 
   function commitTransform(kind, axis, rawValue) {
@@ -880,14 +960,18 @@
     if (!state.viewer || !state.engine.mergeSolids) return;
 
     var all = [];
-    state.pieces.forEach(function (piece) {
+    var previewEntries = [];
+    state.pieces.forEach(function (piece, index) {
       var sourceObjects = piece.builtObjects || piece.lastGoodObjects;
       if (!sourceObjects || !sourceObjects.length) return;
 
       var hadTransformError = false;
+      var pieceBounds = null;
       sourceObjects.forEach(function (obj) {
         try {
-          var transformed = applyPieceTransform(obj, piece);
+          var transformedBase = applyPieceTransform(obj, piece);
+          pieceBounds = extendPreviewBounds(pieceBounds, getObjectBounds(transformedBase));
+          var transformed = transformedBase;
           if (piece.id === state.selectedPieceId) {
             transformed = colorizeSelected(transformed);
           }
@@ -898,24 +982,45 @@
         }
       });
 
+      if (pieceBounds) {
+        previewEntries.push({
+          pieceId: piece.id,
+          refNumber: index + 1,
+          title: piece.title,
+          customName: piece.id,
+          selected: piece.id === state.selectedPieceId,
+          bounds: cloneBounds(pieceBounds),
+          origin: {
+            x: Number(piece.position.x) || 0,
+            y: Number(piece.position.y) || 0,
+            z: Number(piece.position.z) || 0
+          }
+        });
+      }
+
       if (!hadTransformError && piece.error && piece.error.indexOf('Transform failed:') === 0) {
         piece.error = null;
       }
     });
+
+    state.previewRefEntries = previewEntries;
 
     renderAssemblyList();
     if (getSelectedPiece()) renderInspector();
 
     if (!all.length) {
       state.viewer.clear();
+      renderPreviewRefs();
       return;
     }
 
     try {
       var merged = state.engine.mergeSolids(all);
       state.viewer.setCsg(merged);
+      renderPreviewRefs();
     } catch (error) {
       setGlobalStatus('Render failed: ' + errorMessage(error), 'error');
+      renderPreviewRefs();
     }
   }
 
@@ -1103,6 +1208,685 @@
     rebuildPiece(piece);
   }
 
+  function renderPreviewRefs() {
+    syncPreviewRefsViewport();
+    if (!state.previewRefsEnabled) {
+      clearPreviewRefsOverlay();
+      return;
+    }
+    schedulePreviewRefsOverlayUpdate();
+  }
+
+  function clearPreviewRefsOverlay() {
+    if (els.previewRefsLayer) els.previewRefsLayer.innerHTML = '';
+    if (els.previewRefsSvg) els.previewRefsSvg.innerHTML = '';
+  }
+
+  function updatePreviewRefsOverlay() {
+    syncPreviewRefsViewport();
+
+    if (!state.previewRefsEnabled || !els.previewRefs || !els.previewRefsLayer || !els.previewRefsSvg || !state.viewer || !state.viewer.gl) {
+      clearPreviewRefsOverlay();
+      return;
+    }
+
+    var width = els.previewRefs.clientWidth || 0;
+    var height = els.previewRefs.clientHeight || 0;
+    if (!width || !height) {
+      clearPreviewRefsOverlay();
+      return;
+    }
+
+    var projectedItems = projectPreviewRefEntries(width, height);
+    els.previewRefsLayer.innerHTML = '';
+    els.previewRefsSvg.innerHTML = '';
+    if (!projectedItems.length) return;
+
+    projectedItems.sort(function (a, b) {
+      return a.screenY - b.screenY;
+    });
+
+    projectedItems.forEach(function (item) {
+      item.labelEl = buildPreviewRefLabel(item);
+      item.labelEl.style.visibility = 'hidden';
+      els.previewRefsLayer.appendChild(item.labelEl);
+      var rect = item.labelEl.getBoundingClientRect();
+      item.labelWidth = Math.max(32, Math.ceil(rect.width));
+      item.labelHeight = Math.max(32, Math.ceil(rect.height));
+    });
+
+    layoutPreviewRefItems(projectedItems, width, height);
+
+    projectedItems.forEach(function (item) {
+      item.labelEl.style.left = item.labelRect.x + 'px';
+      item.labelEl.style.top = item.labelRect.y + 'px';
+      item.labelEl.style.visibility = 'visible';
+      item.renderRect = getOverlayRelativeRect(item.labelEl, els.previewRefs) || item.labelRect;
+    });
+
+    projectedItems.forEach(function (item) {
+      appendPreviewGuide(els.previewRefsSvg, item);
+    });
+  }
+
+  function projectPreviewRefEntries(width, height) {
+    var gl = state.viewer && state.viewer.gl;
+    var canvas = state.viewer && (state.viewer.canvas || (gl && gl.canvas));
+    if (!gl || !canvas || !els.previewRefs) return [];
+
+    var overlayRect = els.previewRefs.getBoundingClientRect();
+    var canvasRect = canvas.getBoundingClientRect();
+    var viewport = gl.getParameter(gl.VIEWPORT);
+    if (!viewport || viewport.length < 4 || !canvasRect.width || !canvasRect.height) return [];
+
+    return state.previewRefEntries.reduce(function (out, entry) {
+      if (!entry || !entry.bounds) return out;
+
+      var originWorld = entry.origin || getBoundsCenter(entry.bounds);
+      var originPoint = projectWorldPointToOverlay(gl, originWorld, overlayRect, canvasRect, viewport);
+      if (!originPoint || !Number.isFinite(originPoint.z) || originPoint.z < 0 || originPoint.z > 1) return out;
+
+      var center = getBoundsCenter(entry.bounds);
+      var centerPoint = projectWorldPointToOverlay(gl, center, overlayRect, canvasRect, viewport) || originPoint;
+
+      var cornerPoints = getBoundsCorners(entry.bounds).map(function (corner) {
+        return projectWorldPointToOverlay(gl, corner, overlayRect, canvasRect, viewport);
+      }).filter(function (point) {
+        return point && Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.z) && point.z >= 0 && point.z <= 1;
+      });
+
+      if (!cornerPoints.length) cornerPoints = [originPoint];
+
+      var projectedHull = getConvexHull2D(cornerPoints.concat([originPoint]));
+      var projectedRect = getProjectedPieceRect(projectedHull.length ? projectedHull : cornerPoints, originPoint, width, height);
+      if (!projectedRect) return out;
+
+      out.push({
+        pieceId: entry.pieceId,
+        refNumber: entry.refNumber,
+        title: entry.title,
+        customName: entry.customName,
+        selected: !!entry.selected,
+        anchorX: originPoint.x,
+        anchorY: originPoint.y,
+        screenX: originPoint.x,
+        screenY: originPoint.y,
+        pieceRect: projectedRect,
+        projectedHull: projectedHull,
+        originPoint: originPoint,
+        centerPoint: centerPoint
+      });
+      return out;
+    }, []);
+  }
+
+  function buildPreviewRefLabel(item) {
+    var label = document.createElement('button');
+    label.type = 'button';
+    label.className = 'asm-preview-ref-label';
+    if (item.selected) label.classList.add('is-selected');
+    label.title = item.refNumber + ' · ' + item.title + ' · ' + item.customName;
+    label.setAttribute('aria-label', 'Select part reference ' + item.refNumber + ' for ' + item.title);
+    label.dataset.pieceId = item.pieceId;
+
+    function swallowPointer(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+    }
+
+    label.addEventListener('pointerdown', function (event) {
+      swallowPointer(event);
+      selectPieceById(item.pieceId);
+    });
+    label.addEventListener('mousedown', function (event) {
+      swallowPointer(event);
+      selectPieceById(item.pieceId);
+    });
+    label.addEventListener('mouseup', swallowPointer);
+    label.addEventListener('click', function (event) {
+      swallowPointer(event);
+      selectPieceById(item.pieceId);
+    });
+
+    var ref = document.createElement('span');
+    ref.className = 'asm-preview-ref-index';
+    ref.textContent = String(item.refNumber);
+    label.appendChild(ref);
+
+    return label;
+  }
+
+  function layoutPreviewRefItems(items, width, height) {
+    if (!items || !items.length) return;
+
+    var margin = 8;
+    var placedRects = [];
+    var placedLines = [];
+
+    items.sort(function (a, b) {
+      if (!!a.selected !== !!b.selected) return a.selected ? -1 : 1;
+      var aCentrality = Math.min(a.anchorX, width - a.anchorX, a.anchorY, height - a.anchorY);
+      var bCentrality = Math.min(b.anchorX, width - b.anchorX, b.anchorY, height - b.anchorY);
+      if (aCentrality !== bCentrality) return bCentrality - aCentrality;
+      return a.anchorY - b.anchorY;
+    });
+
+    items.forEach(function (item) {
+      var candidates = buildPreviewPlacementCandidates(item, width, height);
+      var best = null;
+      var bestScore = Infinity;
+
+      candidates.forEach(function (candidate, index) {
+        var rect = {
+          x: clamp(candidate.x, margin, Math.max(margin, width - item.labelWidth - margin)),
+          y: clamp(candidate.y, margin, Math.max(margin, height - item.labelHeight - margin)),
+          w: item.labelWidth,
+          h: item.labelHeight
+        };
+        var attachPoint = getNearestPointOnRect(rect, item.anchorX, item.anchorY);
+        var line = {
+          x1: item.originPoint.x,
+          y1: item.originPoint.y,
+          x2: attachPoint.x,
+          y2: attachPoint.y
+        };
+        var score = getPreviewPlacementScore(rect, placedRects, item, index, line, placedLines, width, height);
+        if (score < bestScore) {
+          bestScore = score;
+          best = {
+            rect: rect,
+            attachPoint: attachPoint,
+            line: line
+          };
+        }
+      });
+
+      if (!best) {
+        var fallbackRect = {
+          x: clamp(item.anchorX + 18, margin, Math.max(margin, width - item.labelWidth - margin)),
+          y: clamp(item.anchorY - (item.labelHeight / 2), margin, Math.max(margin, height - item.labelHeight - margin)),
+          w: item.labelWidth,
+          h: item.labelHeight
+        };
+        var fallbackAttach = getNearestPointOnRect(fallbackRect, item.anchorX, item.anchorY);
+        best = {
+          rect: fallbackRect,
+          attachPoint: fallbackAttach,
+          line: {
+            x1: item.originPoint.x,
+            y1: item.originPoint.y,
+            x2: fallbackAttach.x,
+            y2: fallbackAttach.y
+          }
+        };
+      }
+
+      item.labelRect = best.rect;
+      item.attachPoint = best.attachPoint;
+      item.guidePoint = item.originPoint || { x: item.anchorX, y: item.anchorY };
+      placedRects.push({
+        x: best.rect.x,
+        y: best.rect.y,
+        w: best.rect.w,
+        h: best.rect.h,
+        pieceId: item.pieceId
+      });
+      placedLines.push({
+        x1: best.line.x1,
+        y1: best.line.y1,
+        x2: best.line.x2,
+        y2: best.line.y2,
+        pieceId: item.pieceId
+      });
+    });
+  }
+
+  function buildPreviewPlacementCandidates(item, width, height) {
+    var labelWidth = item.labelWidth;
+    var labelHeight = item.labelHeight;
+    var pieceRect = item.pieceRect;
+    var horizontalGap = 16;
+    var verticalGap = 14;
+    var diagonalGapX = 14;
+    var diagonalGapY = 10;
+    var verticalStep = Math.max(12, Math.round(labelHeight * 0.75));
+    var horizontalStep = Math.max(12, Math.round(labelWidth * 0.18));
+    var preferRight = item.anchorX < width * 0.5;
+    var preferBottom = item.anchorY < height * 0.5;
+    var primarySides = preferRight ? ['right', 'left'] : ['left', 'right'];
+    var verticalSides = preferBottom ? ['bottom', 'top'] : ['top', 'bottom'];
+    var diagonalSides = [];
+    if (preferRight && preferBottom) diagonalSides = ['bottom-right', 'top-right', 'bottom-left', 'top-left'];
+    else if (preferRight && !preferBottom) diagonalSides = ['top-right', 'bottom-right', 'top-left', 'bottom-left'];
+    else if (!preferRight && preferBottom) diagonalSides = ['bottom-left', 'top-left', 'bottom-right', 'top-right'];
+    else diagonalSides = ['top-left', 'bottom-left', 'top-right', 'bottom-right'];
+
+    var sides = primarySides.concat(diagonalSides).concat(verticalSides);
+    var offsets = [0, -1, 1, -2, 2, -3, 3];
+    var candidates = [];
+
+    sides.forEach(function (side) {
+      offsets.forEach(function (offset) {
+        var x = item.anchorX;
+        var y = item.anchorY;
+
+        if (side === 'right') {
+          x = pieceRect.x + pieceRect.w + horizontalGap + (Math.max(0, Math.abs(offset) - 1) * 4);
+          y = item.anchorY - (labelHeight / 2) + (offset * verticalStep);
+        } else if (side === 'left') {
+          x = pieceRect.x - horizontalGap - labelWidth - (Math.max(0, Math.abs(offset) - 1) * 4);
+          y = item.anchorY - (labelHeight / 2) + (offset * verticalStep);
+        } else if (side === 'bottom') {
+          x = item.anchorX - (labelWidth / 2) + (offset * horizontalStep);
+          y = pieceRect.y + pieceRect.h + verticalGap + (Math.max(0, Math.abs(offset) - 1) * 4);
+        } else if (side === 'top') {
+          x = item.anchorX - (labelWidth / 2) + (offset * horizontalStep);
+          y = pieceRect.y - labelHeight - verticalGap - (Math.max(0, Math.abs(offset) - 1) * 4);
+        } else if (side === 'top-right') {
+          x = pieceRect.x + pieceRect.w + diagonalGapX + (Math.max(0, Math.abs(offset) - 1) * 4);
+          y = pieceRect.y - labelHeight - diagonalGapY + (offset * Math.round(verticalStep * 0.6));
+        } else if (side === 'top-left') {
+          x = pieceRect.x - labelWidth - diagonalGapX - (Math.max(0, Math.abs(offset) - 1) * 4);
+          y = pieceRect.y - labelHeight - diagonalGapY + (offset * Math.round(verticalStep * 0.6));
+        } else if (side === 'bottom-right') {
+          x = pieceRect.x + pieceRect.w + diagonalGapX + (Math.max(0, Math.abs(offset) - 1) * 4);
+          y = pieceRect.y + pieceRect.h + diagonalGapY + (offset * Math.round(verticalStep * 0.6));
+        } else if (side === 'bottom-left') {
+          x = pieceRect.x - labelWidth - diagonalGapX - (Math.max(0, Math.abs(offset) - 1) * 4);
+          y = pieceRect.y + pieceRect.h + diagonalGapY + (offset * Math.round(verticalStep * 0.6));
+        }
+
+        candidates.push({ x: x, y: y, side: side });
+      });
+    });
+
+    return candidates;
+  }
+
+  function getPreviewPlacementScore(rect, placed, item, candidateIndex, line, placedLines, width, height) {
+    var score = candidateIndex * 18;
+    var centerX = rect.x + (rect.w / 2);
+    var centerY = rect.y + (rect.h / 2);
+    var dx = centerX - item.anchorX;
+    var dy = centerY - item.anchorY;
+    score += Math.sqrt((dx * dx) + (dy * dy)) * 0.7;
+
+    var pieceOverlapWidth = Math.min(rect.x + rect.w, item.pieceRect.x + item.pieceRect.w) - Math.max(rect.x, item.pieceRect.x);
+    var pieceOverlapHeight = Math.min(rect.y + rect.h, item.pieceRect.y + item.pieceRect.h) - Math.max(rect.y, item.pieceRect.y);
+    if (pieceOverlapWidth > 0 && pieceOverlapHeight > 0) {
+      score += 20000 + (pieceOverlapWidth * pieceOverlapHeight);
+    }
+
+    placed.forEach(function (other) {
+      var overlapWidth = Math.min(rect.x + rect.w, other.x + other.w) - Math.max(rect.x, other.x);
+      var overlapHeight = Math.min(rect.y + rect.h, other.y + other.h) - Math.max(rect.y, other.y);
+      if (overlapWidth > 0 && overlapHeight > 0) {
+        score += 100000 + (overlapWidth * overlapHeight);
+      } else {
+        var gapX = Math.max(0, Math.max(other.x - (rect.x + rect.w), rect.x - (other.x + other.w)));
+        var gapY = Math.max(0, Math.max(other.y - (rect.y + rect.h), rect.y - (other.y + other.h)));
+        if (gapX < 8 && gapY < 8) score += 250;
+      }
+    });
+
+    placedLines.forEach(function (otherLine) {
+      if (segmentsIntersect(line.x1, line.y1, line.x2, line.y2, otherLine.x1, otherLine.y1, otherLine.x2, otherLine.y2)) {
+        score += 16000;
+      }
+    });
+
+    placed.forEach(function (otherRect) {
+      if (segmentIntersectsRect(line.x1, line.y1, line.x2, line.y2, otherRect)) {
+        score += 14000;
+      }
+    });
+
+    if (segmentIntersectsRect(line.x1, line.y1, line.x2, line.y2, rect)) {
+      score += 6000;
+    }
+
+    var edgePadding = Math.min(rect.x, rect.y, Math.max(0, width - (rect.x + rect.w)), Math.max(0, height - (rect.y + rect.h)));
+    if (edgePadding < 6) score += (6 - edgePadding) * 120;
+
+    return score;
+  }
+
+  function getNearestPointOnRect(rect, px, py) {
+    var cx = clamp(px, rect.x, rect.x + rect.w);
+    var cy = clamp(py, rect.y, rect.y + rect.h);
+
+    var distances = [
+      { x: cx, y: rect.y, d: Math.abs(py - rect.y) },
+      { x: cx, y: rect.y + rect.h, d: Math.abs(py - (rect.y + rect.h)) },
+      { x: rect.x, y: cy, d: Math.abs(px - rect.x) },
+      { x: rect.x + rect.w, y: cy, d: Math.abs(px - (rect.x + rect.w)) }
+    ];
+
+    distances.sort(function (a, b) { return a.d - b.d; });
+    return { x: distances[0].x, y: distances[0].y };
+  }
+
+  function segmentIntersectsRect(x1, y1, x2, y2, rect) {
+    if (!rect) return false;
+    var inside1 = x1 > rect.x && x1 < rect.x + rect.w && y1 > rect.y && y1 < rect.y + rect.h;
+    var inside2 = x2 > rect.x && x2 < rect.x + rect.w && y2 > rect.y && y2 < rect.y + rect.h;
+    if (inside1 || inside2) return true;
+
+    var rx1 = rect.x;
+    var ry1 = rect.y;
+    var rx2 = rect.x + rect.w;
+    var ry2 = rect.y + rect.h;
+
+    return segmentsIntersect(x1, y1, x2, y2, rx1, ry1, rx2, ry1)
+      || segmentsIntersect(x1, y1, x2, y2, rx2, ry1, rx2, ry2)
+      || segmentsIntersect(x1, y1, x2, y2, rx2, ry2, rx1, ry2)
+      || segmentsIntersect(x1, y1, x2, y2, rx1, ry2, rx1, ry1);
+  }
+
+  function segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
+    var o1 = segmentOrientation(ax, ay, bx, by, cx, cy);
+    var o2 = segmentOrientation(ax, ay, bx, by, dx, dy);
+    var o3 = segmentOrientation(cx, cy, dx, dy, ax, ay);
+    var o4 = segmentOrientation(cx, cy, dx, dy, bx, by);
+
+    if (o1 !== o2 && o3 !== o4) return true;
+    if (o1 === 0 && pointOnSegment(ax, ay, cx, cy, bx, by)) return true;
+    if (o2 === 0 && pointOnSegment(ax, ay, dx, dy, bx, by)) return true;
+    if (o3 === 0 && pointOnSegment(cx, cy, ax, ay, dx, dy)) return true;
+    if (o4 === 0 && pointOnSegment(cx, cy, bx, by, dx, dy)) return true;
+    return false;
+  }
+
+  function segmentOrientation(ax, ay, bx, by, cx, cy) {
+    var value = ((by - ay) * (cx - bx)) - ((bx - ax) * (cy - by));
+    if (Math.abs(value) < 0.0001) return 0;
+    return value > 0 ? 1 : 2;
+  }
+
+  function pointOnSegment(ax, ay, px, py, bx, by) {
+    return px <= Math.max(ax, bx) + 0.0001 && px + 0.0001 >= Math.min(ax, bx)
+      && py <= Math.max(ay, by) + 0.0001 && py + 0.0001 >= Math.min(ay, by);
+  }
+
+  function appendPreviewGuide(svgRoot, item) {
+    if (!svgRoot || !item || !item.guidePoint || !item.labelRect) return;
+
+    var visualRect = item.renderRect || item.labelRect;
+    var attachPoint = {
+      x: visualRect.x + (visualRect.w / 2),
+      y: visualRect.y + (visualRect.h / 2)
+    };
+
+    var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('class', 'asm-preview-ref-line');
+    line.setAttribute('x1', item.guidePoint.x.toFixed(2));
+    line.setAttribute('y1', item.guidePoint.y.toFixed(2));
+    line.setAttribute('x2', attachPoint.x.toFixed(2));
+    line.setAttribute('y2', attachPoint.y.toFixed(2));
+    svgRoot.appendChild(line);
+
+    var dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('class', 'asm-preview-ref-dot');
+    dot.setAttribute('cx', item.guidePoint.x.toFixed(2));
+    dot.setAttribute('cy', item.guidePoint.y.toFixed(2));
+    dot.setAttribute('r', '3.5');
+    svgRoot.appendChild(dot);
+  }
+
+  function getOverlayRelativeRect(element, overlayEl) {
+    if (!element || !overlayEl) return null;
+    var rect = element.getBoundingClientRect();
+    var overlayRect = overlayEl.getBoundingClientRect();
+    return {
+      x: rect.left - overlayRect.left,
+      y: rect.top - overlayRect.top,
+      w: rect.width,
+      h: rect.height
+    };
+  }
+
+  function projectWorldPointToOverlay(gl, worldPoint, overlayRect, canvasRect, viewport) {
+    if (!gl || !worldPoint || !overlayRect || !canvasRect || !viewport) return null;
+    var point = gl.project(worldPoint.x, worldPoint.y, worldPoint.z);
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z)) return null;
+
+    var viewportWidth = Number(viewport[2]) || 0;
+    var viewportHeight = Number(viewport[3]) || 0;
+    if (!viewportWidth || !viewportHeight) return null;
+
+    var relativeX = (point.x - viewport[0]) / viewportWidth;
+    var relativeY = (point.y - viewport[1]) / viewportHeight;
+
+    return {
+      x: (canvasRect.left - overlayRect.left) + (relativeX * canvasRect.width),
+      y: (canvasRect.top - overlayRect.top) + ((1 - relativeY) * canvasRect.height),
+      z: point.z
+    };
+  }
+
+  function getBoundsCenter(bounds) {
+    return {
+      x: (bounds.min.x + bounds.max.x) / 2,
+      y: (bounds.min.y + bounds.max.y) / 2,
+      z: (bounds.min.z + bounds.max.z) / 2
+    };
+  }
+
+  function getBoundsCorners(bounds) {
+    var min = bounds.min;
+    var max = bounds.max;
+    return [
+      { x: min.x, y: min.y, z: min.z },
+      { x: min.x, y: min.y, z: max.z },
+      { x: min.x, y: max.y, z: min.z },
+      { x: min.x, y: max.y, z: max.z },
+      { x: max.x, y: min.y, z: min.z },
+      { x: max.x, y: min.y, z: max.z },
+      { x: max.x, y: max.y, z: min.z },
+      { x: max.x, y: max.y, z: max.z }
+    ];
+  }
+
+  function getProjectedPieceRect(projectedPoints, centerPoint, width, height) {
+    if (!projectedPoints || !projectedPoints.length) return null;
+
+    var xs = projectedPoints.map(function (point) { return point.x; });
+    var ys = projectedPoints.map(function (point) { return point.y; });
+    xs.push(centerPoint.x);
+    ys.push(centerPoint.y);
+
+    var minX = Math.min.apply(null, xs);
+    var maxX = Math.max.apply(null, xs);
+    var minY = Math.min.apply(null, ys);
+    var maxY = Math.max.apply(null, ys);
+
+    if (maxX < -24 || minX > width + 24 || maxY < -24 || minY > height + 24) return null;
+
+    var rect = {
+      x: clamp(minX, 0, width),
+      y: clamp(minY, 0, height),
+      w: clamp(maxX, 0, width) - clamp(minX, 0, width),
+      h: clamp(maxY, 0, height) - clamp(minY, 0, height)
+    };
+
+    rect.w = Math.max(rect.w, 6);
+    rect.h = Math.max(rect.h, 6);
+    rect.cx = clamp(centerPoint.x, rect.x, rect.x + rect.w);
+    rect.cy = clamp(centerPoint.y, rect.y, rect.y + rect.h);
+    return rect;
+  }
+
+  function getConvexHull2D(points) {
+    if (!points || points.length < 3) return points ? points.slice() : [];
+
+    var unique = [];
+    var seen = Object.create(null);
+    points.forEach(function (point) {
+      if (!point) return;
+      var key = point.x.toFixed(3) + ':' + point.y.toFixed(3);
+      if (seen[key]) return;
+      seen[key] = true;
+      unique.push({ x: point.x, y: point.y });
+    });
+
+    if (unique.length < 3) return unique;
+
+    unique.sort(function (a, b) {
+      if (a.x !== b.x) return a.x - b.x;
+      return a.y - b.y;
+    });
+
+    function cross(o, a, b) {
+      return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    }
+
+    var lower = [];
+    unique.forEach(function (point) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) {
+        lower.pop();
+      }
+      lower.push(point);
+    });
+
+    var upper = [];
+    unique.slice().reverse().forEach(function (point) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) {
+        upper.pop();
+      }
+      upper.push(point);
+    });
+
+    upper.pop();
+    lower.pop();
+    return lower.concat(upper);
+  }
+
+  function getPolygonConnectionPoint(points, targetPoint) {
+    if (!points || !points.length || !targetPoint) return null;
+    if (points.length === 1) return { x: points[0].x, y: points[0].y };
+
+    var bestPoint = null;
+    var bestDistance = Infinity;
+
+    for (var i = 0; i < points.length; i += 1) {
+      var a = points[i];
+      var b = points[(i + 1) % points.length];
+      var candidate = getNearestPointOnSegment(a, b, targetPoint);
+      var dx = candidate.x - targetPoint.x;
+      var dy = candidate.y - targetPoint.y;
+      var distSq = (dx * dx) + (dy * dy);
+      if (distSq < bestDistance) {
+        bestDistance = distSq;
+        bestPoint = candidate;
+      }
+    }
+
+    return bestPoint;
+  }
+
+  function getNearestPointOnSegment(a, b, p) {
+    var abX = b.x - a.x;
+    var abY = b.y - a.y;
+    var abLenSq = (abX * abX) + (abY * abY);
+    if (!abLenSq) return { x: a.x, y: a.y };
+
+    var t = (((p.x - a.x) * abX) + ((p.y - a.y) * abY)) / abLenSq;
+    t = clamp(t, 0, 1);
+    return {
+      x: a.x + (abX * t),
+      y: a.y + (abY * t)
+    };
+  }
+
+  function getRectConnectionPoint(rect, targetPoint) {
+    return {
+      x: clamp(targetPoint.x, rect.x, rect.x + rect.w),
+      y: clamp(targetPoint.y, rect.y, rect.y + rect.h)
+    };
+  }
+
+  function getObjectBounds(obj) {
+    if (!obj || typeof obj.getBounds !== 'function') return null;
+    try {
+      var bounds = obj.getBounds();
+      if (!bounds || bounds.length < 2) return null;
+      return bounds;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function extendPreviewBounds(current, bounds) {
+    if (!bounds || bounds.length < 2) return current;
+    var min = bounds[0];
+    var max = bounds[1];
+    if (!current) {
+      return {
+        min: { x: min.x, y: min.y, z: min.z },
+        max: { x: max.x, y: max.y, z: max.z }
+      };
+    }
+
+    current.min.x = Math.min(current.min.x, min.x);
+    current.min.y = Math.min(current.min.y, min.y);
+    current.min.z = Math.min(current.min.z, min.z);
+    current.max.x = Math.max(current.max.x, max.x);
+    current.max.y = Math.max(current.max.y, max.y);
+    current.max.z = Math.max(current.max.z, max.z);
+    return current;
+  }
+
+  function cloneBounds(bounds) {
+    if (!bounds || !bounds.min || !bounds.max) return null;
+    return {
+      min: { x: bounds.min.x, y: bounds.min.y, z: bounds.min.z },
+      max: { x: bounds.max.x, y: bounds.max.y, z: bounds.max.z }
+    };
+  }
+
+  function formatPartParameterValue(value) {
+    if (Array.isArray(value) || (value && typeof value === 'object')) return stableStringify(value);
+    return String(value);
+  }
+
+  function getPieceExportParameters(piece) {
+    var cache = state.sourceCache[piece.file];
+    if (cache && Array.isArray(cache.paramDefinitions) && cache.paramDefinitions.length) {
+      var effective = getEffectiveParams(piece, cache.defaultParams || {});
+      return cache.paramDefinitions.reduce(function (parts, definition) {
+        if (!definition || !definition.name) return parts;
+        var type = String(definition.type || 'text').toLowerCase();
+        if (type === 'group') return parts;
+        parts.push(definition.name + ': ' + formatPartParameterValue(effective[definition.name]));
+        return parts;
+      }, []);
+    }
+
+    return Object.keys(piece.paramsDiff || {}).sort().map(function (key) {
+      return key + ': ' + formatPartParameterValue(piece.paramsDiff[key]);
+    });
+  }
+
+  function onExportTxt() {
+    var lines = state.pieces.map(function (piece, index) {
+      var params = getPieceExportParameters(piece);
+      var paramsText = params.length ? params.join(', ') : 'NONE';
+      return [String(index + 1), piece.title, piece.id, paramsText].join(' - ');
+    });
+    var body = lines.join('\n');
+    var blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'assembly-reference.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setGlobalStatus('Exported assembly-reference.txt', 'info');
+  }
+
   function onExport() {
     var payload = {
       version: 1,
@@ -1207,6 +1991,7 @@
 
     if (!newPieces.length && state.viewer) {
       state.viewer.clear();
+      renderPreviewRefs();
     }
   }
 
